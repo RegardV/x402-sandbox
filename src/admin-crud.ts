@@ -117,7 +117,7 @@ ${field("mimeType", p.mimeType)}
   return page(opts.sku ? `Edit ${opts.sku}` : "New product", body, { admin: true });
 }
 
-const RESERVED_SKUS = new Set(["admin", "catalog", "feed", "catalog.json"]);
+const RESERVED_SKUS = new Set(["admin", "catalog", "feed", "catalog.json", "docs"]);
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);

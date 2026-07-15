@@ -26,6 +26,7 @@ import { adminCrud } from "./admin-crud.js";
 import { adminFiles } from "./admin-files.js";
 import { startRepricer } from "./pricing.js";
 import { settingsRoutes } from "./settings.js";
+import { docsRoutes } from "./docs.js";
 import type { PriceOverrides } from "./routes.js";
 
 export interface AppHandle {
@@ -137,6 +138,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   app.get("/catalog", catalogHtml(deps));
   app.get("/catalog.json", catalogJson(deps));
   app.get("/feed", feedPage(deps));
+  app.route("/", docsRoutes());
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
   admin.route("/", adminFiles({ products: () => products }));

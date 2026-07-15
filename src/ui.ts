@@ -76,6 +76,7 @@ export function page(title: string, body: string, opts: PageOpts = {}): string {
   const nav = [
     ["/catalog", "Store", "store"],
     ["/feed", "Sales", "sales"],
+    ["/docs", "Docs", "docs"],
     ...(opts.admin ? [["/admin", "Admin", "admin"]] : []),
   ]
     .map(([href, label]) => `<a class="nav" href="${href}">${label}</a>`)

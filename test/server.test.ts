@@ -8,15 +8,15 @@ import type { EnvConfig } from "../src/config.js";
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "x402-server-"));
-  mkdirSync(join(dir, "docs"));
-  writeFileSync(join(dir, "docs", "guide.md"), "# paid guide");
+  mkdirSync(join(dir, "goods"));
+  writeFileSync(join(dir, "goods", "guide.md"), "# paid guide");
   writeFileSync(join(dir, "single.md"), "# single");
   const productsPath = join(dir, "products.json");
   writeFileSync(
     productsPath,
     JSON.stringify({
       products: [
-        { sku: "guide-dir", title: "Guides", price: "$0.01", route: "GET /docs/*", contentDir: "./docs" },
+        { sku: "guide-dir", title: "Guides", price: "$0.01", route: "GET /goods/*", contentDir: "./goods" },
         { sku: "single", title: "Single", price: "$0.02", route: "GET /files/single.md", contentPath: "./single.md" },
       ],
     }),
@@ -69,7 +69,7 @@ describe("createApp", () => {
   });
 
   test("paid route without payment → 402 with payment requirements, logged unpaid_402", async () => {
-    const res = await f.handle.app.request("/docs/guide.md");
+    const res = await f.handle.app.request("/goods/guide.md");
     expect(res.status).toBe(402);
     await flush();
     const rows = f.store.recentRequests(5);
@@ -77,13 +77,13 @@ describe("createApp", () => {
   });
 
   test("missing file inside paid dir → 404 BEFORE payment challenge", async () => {
-    const res = await f.handle.app.request("/docs/nope.md");
+    const res = await f.handle.app.request("/goods/nope.md");
     expect(res.status).toBe(404);
   });
 
   test("dotfile inside paid dir → 404, never 402", async () => {
-    writeFileSync(join(f.dir, "docs", ".env"), "SECRET=x");
-    const res = await f.handle.app.request("/docs/.env");
+    writeFileSync(join(f.dir, "goods", ".env"), "SECRET=x");
+    const res = await f.handle.app.request("/goods/.env");
     expect(res.status).toBe(404);
   });
 
@@ -105,14 +105,14 @@ describe("createApp", () => {
     f.handle.reload();
     expect((await f.handle.app.request("/files/extra.md")).status).toBe(402);
     // old paid route no longer configured → falls through to not-found
-    expect((await f.handle.app.request("/docs/guide.md")).status).toBe(404);
+    expect((await f.handle.app.request("/goods/guide.md")).status).toBe(404);
     expect(f.store.productBySku("guide-dir")?.active).toBe(false);
   });
 
   test("reload with a broken catalog keeps serving the old one", async () => {
     writeFileSync(f.productsPath, "{ not json");
     f.handle.reload();
-    expect((await f.handle.app.request("/docs/guide.md")).status).toBe(402);
+    expect((await f.handle.app.request("/goods/guide.md")).status).toBe(402);
     expect(f.store.productBySku("guide-dir")?.active).toBe(true);
   });
 
