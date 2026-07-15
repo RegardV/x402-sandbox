@@ -1,11 +1,20 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
+export interface DemandPricing {
+  mode: "demand";
+  floor: string; // "$0.001"
+  ceiling: string; // "$0.10"
+  step: number; // multiplicative, (0,1)
+  windowMinutes: number;
+}
+
 export interface ProductConfig {
   sku: string;
   title: string;
   description?: string;
-  price: string | number;
+  price?: string | number; // exactly one of price | pricing
+  pricing?: DemandPricing;
   network?: string;
   route: string;
   contentPath?: string;
@@ -92,14 +101,32 @@ export function loadProducts(jsonText: string, baseDir: string): ProductConfig[]
     if (typeof p.title !== "string" || p.title === "") {
       fail(sku, "title", "must be a non-empty string");
     }
+    if ((p.price === undefined) === (p.pricing === undefined)) {
+      fail(sku, "price", "exactly one of price or pricing must be set");
+    }
     if (typeof p.price === "number") {
       if (!(p.price > 0)) fail(sku, "price", "must be > 0");
     } else if (typeof p.price === "string") {
       if (!/^\$\d+(\.\d+)?$/.test(p.price) || !(Number(p.price.slice(1)) > 0)) {
         fail(sku, "price", 'must match "$<amount>" with value > 0');
       }
-    } else {
+    } else if (p.price !== undefined) {
       fail(sku, "price", "must be a number or a $-prefixed string");
+    }
+    if (p.pricing !== undefined) {
+      const pr = p.pricing;
+      const money = (v: unknown) => typeof v === "string" && /^\$\d+(\.\d+)?$/.test(v) && Number(v.slice(1)) > 0;
+      if (pr.mode !== "demand") fail(sku, "pricing.mode", 'must be "demand"');
+      if (!money(pr.floor) || !money(pr.ceiling)) fail(sku, "pricing", "floor/ceiling must be $-strings > 0");
+      if (Number(pr.floor.slice(1)) >= Number(pr.ceiling.slice(1))) {
+        fail(sku, "pricing", "floor must be below ceiling");
+      }
+      if (typeof pr.step !== "number" || !(pr.step > 0 && pr.step < 1)) {
+        fail(sku, "pricing", "step must be a number in (0,1)");
+      }
+      if (typeof pr.windowMinutes !== "number" || !(pr.windowMinutes >= 1)) {
+        fail(sku, "pricing", "windowMinutes must be >= 1");
+      }
     }
     if (p.network !== undefined && !/^eip155:\d+$/.test(p.network)) {
       fail(sku, "network", 'must match "eip155:<chainId>"');

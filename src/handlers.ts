@@ -146,6 +146,13 @@ function statSize(abs: string): number | undefined {
   }
 }
 
+/** Fixed price from config, or the live repriced value for demand products. */
+function displayPrice(deps: HandlerDeps, p: ProductConfig): string | number {
+  if (!p.pricing) return p.price!;
+  const live = deps.store.productBySku(p.sku)?.priceUsdc;
+  return live ? `$${live}` : p.pricing.floor;
+}
+
 function catalogEntries(deps: HandlerDeps): CatalogEntry[] {
   return deps.products().map((p) => {
     const pattern = routePath(p);
@@ -160,14 +167,14 @@ function catalogEntries(deps: HandlerDeps): CatalogEntry[] {
           ...(p.preview && abs ? { excerpt: excerptOf(abs) } : {}),
         };
       });
-      return { sku: p.sku, title: p.title, description: p.description, price: p.price, route: p.route, files };
+      return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, files };
     }
     const abs = resolve(deps.baseDir, (p.contentPath ?? p.bundlePath)!);
     return {
       sku: p.sku,
       title: p.title,
       description: p.description,
-      price: p.price,
+      price: displayPrice(deps, p),
       route: p.route,
       url: pattern,
       size: statSize(abs),

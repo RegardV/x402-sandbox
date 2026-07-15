@@ -162,6 +162,21 @@ export class Store {
     return row ? toProductRow(row) : undefined;
   }
 
+  /** Persist a demand-repriced price (decimal string, no "$"). */
+  setPrice(sku: string, priceUsdc: string): void {
+    this.db
+      .prepare("UPDATE products SET price_usdc = ?, updated_at = ? WHERE sku = ?")
+      .run(priceUsdc, new Date().toISOString(), sku);
+  }
+
+  /** Settled sales for a product since an ISO timestamp (the demand signal). */
+  salesCountSince(productId: number, sinceIso: string): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS c FROM settlements WHERE product_id = ? AND ts >= ?")
+      .get(productId, sinceIso) as { c: number };
+    return row.c;
+  }
+
   insertRequest(r: RequestLog): void {
     this.db.prepare(`
       INSERT INTO requests (ts, method, path, product_id, outcome, status_code, payer, price_usdc, tx_hash, user_agent, ip_hash)

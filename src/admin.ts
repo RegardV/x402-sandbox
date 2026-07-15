@@ -42,12 +42,16 @@ th{background:#f4f4f4}
 </style></head><body>
 <h1>Admin</h1>
 <p><a href="/catalog">Store</a> · <a href="/feed">Public sales feed</a></p>
+<p><a href="/admin/products/new">Add product</a> · <a href="/admin/export/sales.csv">Export sales CSV</a></p>
 
 <h2>Products</h2>
-${table(
-  ['sku', 'title', 'price', 'network', 'kind'],
-  store.activeProducts().map((p) => [p.sku, p.title, p.priceUsdc, p.network, kind(p)]),
-)}
+<table><thead><tr><th>sku</th><th>title</th><th>price</th><th>network</th><th>kind</th><th>actions</th></tr></thead><tbody>
+${
+  store.activeProducts().length
+    ? store.activeProducts().map((p) => `<tr><td>${escapeHtml(p.sku)}</td><td>${escapeHtml(p.title)}</td><td>${escapeHtml(p.priceUsdc)}</td><td>${escapeHtml(p.network)}</td><td>${escapeHtml(kind(p))}</td><td><a href="/admin/products/${encodeURIComponent(p.sku)}/edit">edit</a></td></tr>`).join('')
+    : '<tr><td colspan="6">none</td></tr>'
+}
+</tbody></table>
 
 <h2>Sales</h2>
 <div class="tile">Total revenue: ${escapeHtml(totals.totalUsdc.toFixed(2))} USDC</div>

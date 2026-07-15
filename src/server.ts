@@ -7,6 +7,7 @@ import { createPaywall, evmPaywall } from "@x402/paywall";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 import { loadEnv, loadProducts, type EnvConfig, type ProductConfig } from "./config.js";
+import { assertNotDevWalletOnMainnet } from "./provision.js";
 import { Store } from "./db.js";
 import { buildRoutes } from "./routes.js";
 import { requestLogger } from "./request-logger.js";
@@ -20,6 +21,9 @@ import {
   type HandlerDeps,
 } from "./handlers.js";
 import { adminApp } from "./admin.js";
+import { adminCrud } from "./admin-crud.js";
+import { startRepricer } from "./pricing.js";
+import type { PriceOverrides } from "./routes.js";
 
 export interface AppHandle {
   app: Hono;
@@ -29,6 +33,10 @@ export interface AppHandle {
   /** Fetches supported payment kinds from the facilitator. Must resolve once
    *  before paid routes can issue 402 challenges. */
   init(): Promise<void>;
+  /** Current validated catalog. */
+  products(): ProductConfig[];
+  /** Swap the payment middleware, optionally with a repricing grace window. */
+  rebuild(grace?: PriceOverrides): void;
 }
 
 /** The one method x402ResourceServer.initialize() needs — lets tests stub the facilitator. */
@@ -44,12 +52,13 @@ export interface CreateAppOptions {
   facilitatorClient?: FacilitatorClientLike;
 }
 
-function toStoreProducts(products: ProductConfig[], env: EnvConfig) {
+function toStoreProducts(products: ProductConfig[], env: EnvConfig, store: Store) {
   return products.map((p) => ({
     sku: p.sku,
     title: p.title,
     description: p.description,
-    price: p.price,
+    // demand products keep their live repriced value across catalog syncs
+    price: p.pricing ? `$${store.productBySku(p.sku)?.priceUsdc ?? p.pricing.floor.slice(1)}` : p.price!,
     network: p.network ?? env.network,
     contentPath: p.contentPath,
     bundlePath: p.bundlePath,
@@ -70,13 +79,32 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const paywallConfig = { appName: "x402 sandbox", testnet: env.network === "eip155:84532" };
   const paywall = createPaywall().withNetwork(evmPaywall).withConfig(paywallConfig).build();
 
-  const buildPaid = (products: ProductConfig[]) =>
-    // syncFacilitatorOnStart=false: no network call at construction (reload-safe)
-    paymentMiddleware(buildRoutes(products, env) as never, resourceServer, paywallConfig, paywall, false);
-
   let products = loadProducts(readFileSync(productsPath, "utf8"), baseDir);
+  store.syncProducts(toStoreProducts(products, env, store));
+
+  /** Live prices for demand products from the DB, merged with a repricing grace window. */
+  const demandOverrides = (grace?: PriceOverrides): PriceOverrides => {
+    const m: PriceOverrides = new Map();
+    for (const p of products) {
+      if (!p.pricing) continue;
+      const g = grace?.get(p.sku);
+      const current = g?.current ?? store.productBySku(p.sku)?.priceUsdc ?? p.pricing.floor.slice(1);
+      m.set(p.sku, { current, ...(g?.previous ? { previous: g.previous } : {}) });
+    }
+    return m;
+  };
+
+  const buildPaid = (products: ProductConfig[], grace?: PriceOverrides) =>
+    // syncFacilitatorOnStart=false: no network call at construction (reload-safe)
+    paymentMiddleware(
+      buildRoutes(products, env, demandOverrides(grace)) as never,
+      resourceServer,
+      paywallConfig,
+      paywall,
+      false,
+    );
+
   let paid = buildPaid(products);
-  store.syncProducts(toStoreProducts(products, env));
 
   const deps: HandlerDeps = { store, products: () => products, baseDir };
 
@@ -98,7 +126,9 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   app.get("/catalog", catalogHtml(deps));
   app.get("/catalog.json", catalogJson(deps));
   app.get("/feed", feedPage(deps));
-  app.route("/admin", adminApp(store, env.adminPassword, env.network));
+  const admin = adminApp(store, env.adminPassword, env.network);
+  admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
+  app.route("/admin", admin);
 
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.
   app.use(precheck404(deps));
@@ -109,26 +139,52 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const reload = () => {
     try {
       const next = loadProducts(readFileSync(productsPath, "utf8"), baseDir);
+      store.syncProducts(toStoreProducts(next, env, store));
       paid = buildPaid(next);
       products = next;
-      store.syncProducts(toStoreProducts(next, env));
       console.log(`catalog reloaded: ${next.length} product(s)`);
     } catch (err) {
       console.warn(`catalog reload failed, keeping previous catalog: ${(err as Error).message}`);
     }
   };
 
-  return { app, reload, init: () => resourceServer.initialize() };
+  return {
+    app,
+    reload,
+    init: () => resourceServer.initialize(),
+    products: () => products,
+    rebuild: (grace?: PriceOverrides) => {
+      paid = buildPaid(products, grace);
+    },
+  };
 }
 
 async function main() {
   if (existsSync(".env")) process.loadEnvFile(".env");
   const env = loadEnv();
   const baseDir = process.cwd();
+  assertNotDevWalletOnMainnet(baseDir, env.network, env.payTo); // a generated key never receives real funds
   const productsPath = resolve(baseDir, process.env.PRODUCTS_PATH ?? "products.json");
   const store = new Store(env.dbPath);
-  const { app, reload, init } = createApp({ env, store, baseDir, productsPath });
+  const handle = createApp({ env, store, baseDir, productsPath });
+  const { app, reload, init } = handle;
   await init(); // fail fast if the facilitator is unreachable or unsupported
+
+  const windows = handle.products().flatMap((p) => (p.pricing ? [p.pricing.windowMinutes] : []));
+  if (windows.length) {
+    const windowMs = Math.min(...windows) * 60_000;
+    startRepricer(
+      store,
+      handle.products,
+      (grace) => {
+        handle.rebuild(grace); // old + new price both accepted…
+        setTimeout(() => handle.rebuild(), windowMs).unref(); // …until the grace window closes
+        console.log(`repriced: ${[...grace.entries()].map(([s, g]) => `${s}→$${g.current}`).join(", ")}`);
+      },
+      windowMs,
+    );
+    console.log(`demand repricer active (${windows.length} product(s), window ${windowMs / 60000}m)`);
+  }
 
   let timer: NodeJS.Timeout | undefined;
   watch(productsPath, () => {
