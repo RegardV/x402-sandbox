@@ -56,7 +56,7 @@ export function adminApp(store: Store, adminPassword: string, network: string): 
       ? products
           .map(
             (p) =>
-              `<tr><td>${escapeHtml(p.sku)}</td><td>${escapeHtml(p.title)}</td><td class="num">$${escapeHtml(p.priceUsdc)}</td><td><span class="badge plain">${escapeHtml(kind(p))}</span></td><td>${escapeHtml(p.network)}</td><td><a href="/admin/products/${encodeURIComponent(p.sku)}/edit">edit</a>${p.contentDir ? ` · <a href="/admin/files/${encodeURIComponent(p.sku)}">files</a>` : ""}</td></tr>`,
+              `<tr><td>${escapeHtml(p.sku)}</td><td>${escapeHtml(p.title)}</td><td class="num">$${escapeHtml(p.priceUsdc)}</td><td><span class="badge plain">${escapeHtml(kind(p))}</span></td><td>${escapeHtml(p.network)}</td><td><a href="/admin/products/${encodeURIComponent(p.sku)}/edit">edit</a>${p.contentDir ? ` · <a href="/admin/files/${encodeURIComponent(p.sku)}">files</a>` : ""} <form method="post" action="/admin/products/${encodeURIComponent(p.sku)}/delete" style="display:inline" onsubmit="return confirm('Remove ${escapeHtml(p.sku)} from the store? Its files stay on disk.')"><button class="danger">remove</button></form></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="6" class="muted">none yet</td></tr>';

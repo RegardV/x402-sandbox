@@ -100,4 +100,17 @@ describe("admin UI", () => {
     expect(html).toContain('href="/feed"');
     expect(html).toContain('href="/catalog"');
   });
+
+  test("each product row has a remove control posting to the delete route", async () => {
+    const store = new Store(":memory:");
+    store.syncProducts([{ sku: "lib", title: "Library", price: "$0.01", network: "eip155:84532", contentDir: "/x" }]);
+    const app = new Hono();
+    app.route("/admin", adminApp(store, "test-password-123", "eip155:84532"));
+    const res = await app.request("/admin", {
+      headers: { authorization: "Basic " + Buffer.from("admin:test-password-123").toString("base64") },
+    });
+    const html = await res.text();
+    expect(html).toContain('action="/admin/products/lib/delete"');
+    expect(html).toMatch(/confirm\(/);
+  });
 });
