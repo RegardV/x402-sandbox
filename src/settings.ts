@@ -19,15 +19,21 @@ const MAINNET = { NETWORK: "eip155:8453" };
 
 export interface SettingsUpdate {
   mode?: "testnet" | "mainnet";
-  payTo?: string;
+  payToTestnet?: string;
+  payToMainnet?: string;
   facilitatorUrl?: string;
   cdpApiKeyId?: string;
   cdpApiKeySecret?: string;
 }
 
+const MAINNET_ID = "eip155:8453";
+const ADDR = /^0x[0-9a-fA-F]{40}$/;
+
 /** Merge updates into .env with the SAME validation as startup (loadEnv), plus the
- *  dev-wallet-on-mainnet hard-block. Atomic 0600 write; unknown keys preserved;
- *  empty-string fields ignored (blank form inputs mean "keep current"). Throws on violation. */
+ *  dev-wallet-on-mainnet hard-block. Receive addresses are TWO separate channels
+ *  (PAY_TO_TESTNET / PAY_TO_MAINNET); the effective PAY_TO is derived from the
+ *  active network on every save, so flipping never reuses the other channel's wallet.
+ *  Atomic 0600 write; unknown keys preserved; empty-string fields ignored. Throws on violation. */
 export function applySettings(baseDir: string, update: SettingsUpdate): Record<string, string> {
   const envPath = join(baseDir, ".env");
   const env = readEnvFile(envPath);
@@ -35,12 +41,36 @@ export function applySettings(baseDir: string, update: SettingsUpdate): Record<s
   const set = (key: string, value: string | undefined) => {
     if (value !== undefined && value !== "") env[key] = value;
   };
-  set("PAY_TO", update.payTo);
   set("CDP_API_KEY_ID", update.cdpApiKeyId);
   set("CDP_API_KEY_SECRET", update.cdpApiKeySecret);
   set("FACILITATOR_URL", update.facilitatorUrl);
+
+  // Migrate a legacy single PAY_TO into the slot matching the CURRENT network.
+  const wasMainnet = env["NETWORK"] === MAINNET_ID;
+  if (env["PAY_TO"] && !env["PAY_TO_TESTNET"] && !wasMainnet) env["PAY_TO_TESTNET"] = env["PAY_TO"];
+  if (env["PAY_TO"] && !env["PAY_TO_MAINNET"] && wasMainnet) env["PAY_TO_MAINNET"] = env["PAY_TO"];
+
+  for (const [field, key] of [
+    ["payToTestnet", "PAY_TO_TESTNET"],
+    ["payToMainnet", "PAY_TO_MAINNET"],
+  ] as const) {
+    const v = update[field];
+    if (v !== undefined && v !== "") {
+      if (!ADDR.test(v)) throw new Error(`${key} must be a 0x-prefixed 40-hex-char address`);
+      env[key] = v;
+    }
+  }
+
   if (update.mode === "mainnet") Object.assign(env, MAINNET);
   if (update.mode === "testnet") Object.assign(env, TESTNET);
+
+  // The active channel becomes the effective PAY_TO.
+  const isMainnet = env["NETWORK"] === MAINNET_ID;
+  const active = isMainnet ? env["PAY_TO_MAINNET"] : env["PAY_TO_TESTNET"];
+  if (isMainnet && !active) {
+    throw new Error("mainnet receive address required — set the live-net wallet slot before flipping");
+  }
+  if (active) env["PAY_TO"] = active;
 
   loadEnv(env); // full startup rule set — incl. mainnet-requires-CDP-keys
   assertNotDevWalletOnMainnet(baseDir, env["NETWORK"]!, env["PAY_TO"]!);
@@ -77,8 +107,11 @@ ${notice ? `<div class="card" style="border-color:var(--good)"><span class="badg
 <form class="stack" method="post" action="/admin/settings">
   <label style="font-weight:400"><input type="radio" name="mode" value="testnet" ${mainnet ? "" : "checked"}> Testnet — Base Sepolia, free x402.org facilitator, test USDC</label>
   <label style="font-weight:400"><input type="radio" name="mode" value="mainnet" ${mainnet ? "checked" : ""}> Mainnet — Base, Coinbase CDP facilitator, <strong>real USDC</strong></label>
-  <label>Receiving wallet (payTo) <input name="payTo" value="${escapeHtml(env["PAY_TO"] ?? "")}"></label>
-  <p class="muted">⚠ The wallet receives all revenue — verify every character before saving. Mainnet requires a self-custody address (generated dev wallets are refused) and CDP keys below.</p>
+  <label>Testnet receive address <span class="badge good">test channel</span>${mainnet ? "" : ' <span class="badge plain">active</span>'}
+    <input name="payToTestnet" value="${escapeHtml(env["PAY_TO_TESTNET"] ?? (mainnet ? "" : env["PAY_TO"] ?? ""))}" placeholder="0x… (any wallet — test USDC only)"></label>
+  <label>Mainnet receive address <span class="badge bad">live channel</span>${mainnet ? ' <span class="badge plain">active</span>' : ""}
+    <input name="payToMainnet" value="${escapeHtml(env["PAY_TO_MAINNET"] ?? (mainnet ? env["PAY_TO"] ?? "" : ""))}" placeholder="0x… (self-custody — real money settles here)"></label>
+  <p class="muted">⚠ Two separate channels: the active network decides which one receives revenue. The live address must be self-custody (generated dev wallets are refused) — verify every character. Mainnet also needs CDP keys below.</p>
   <label>CDP API key id ${keyState(env["CDP_API_KEY_ID"])} <input name="cdpApiKeyId" placeholder="leave blank to keep current"></label>
   <label>CDP API key secret ${keyState(env["CDP_API_KEY_SECRET"])} <input type="password" name="cdpApiKeySecret" placeholder="leave blank to keep current"></label>
   <label>Facilitator URL (testnet) <input name="facilitatorUrl" value="${escapeHtml(env["FACILITATOR_URL"] ?? "")}"></label>
@@ -104,7 +137,8 @@ ${notice ? `<div class="card" style="border-color:var(--good)"><span class="badg
     try {
       applySettings(baseDir, {
         mode: b.mode === "mainnet" ? "mainnet" : b.mode === "testnet" ? "testnet" : undefined,
-        payTo: b.payTo,
+        payToTestnet: b.payToTestnet,
+        payToMainnet: b.payToMainnet,
         cdpApiKeyId: b.cdpApiKeyId,
         cdpApiKeySecret: b.cdpApiKeySecret,
         facilitatorUrl: b.facilitatorUrl,
