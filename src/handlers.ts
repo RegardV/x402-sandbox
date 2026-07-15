@@ -55,29 +55,8 @@ function excerptOf(absFile: string): string | undefined {
   }
 }
 
-/** Shared page shell: nav + minimal styling for the public surfaces. */
-export function page(title: string, body: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
-  :root{color-scheme:light dark}
-  body{font-family:system-ui,sans-serif;max-width:860px;margin:0 auto;padding:1rem;line-height:1.5}
-  nav{display:flex;gap:1rem;align-items:baseline;border-bottom:1px solid #8884;padding:.5rem 0;margin-bottom:1.5rem}
-  nav .brand{font-weight:700;margin-right:auto}
-  nav a{text-decoration:none}
-  .card{border:1px solid #8884;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem}
-  .card h2{margin:0 0 .25rem;font-size:1.15rem;display:flex;justify-content:space-between;align-items:baseline}
-  .price{font-size:.95rem;background:#2563eb;color:#fff;border-radius:999px;padding:.1rem .6rem;white-space:nowrap}
-  .desc{margin:.25rem 0 .5rem;color:#888}
-  .files{width:100%;border-collapse:collapse;margin-top:.5rem}
-  .files td{padding:.35rem .5rem;border-top:1px solid #8883}
-  .files td.size{text-align:right;color:#888;white-space:nowrap}
-  .excerpt{color:#888;font-style:italic;font-size:.9rem;margin:.15rem 0 0}
-  table.feed{width:100%;border-collapse:collapse}
-  table.feed th,table.feed td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid #8883}
-  .muted{color:#888}
-  </style></head><body>
-  <nav><span class="brand">x402 sandbox</span><a href="/catalog">Store</a><a href="/feed">Sales</a></nav>
-  ${body}</body></html>`;
-}
+import { page } from "./ui.js";
+export { page };
 
 /** "/docs/*" → "/docs"; the URL a rel path lives under. */
 function fileUrl(routePath: string, rel: string): string {
@@ -217,7 +196,7 @@ export function catalogHtml(deps: HandlerDeps): Handler {
     return c.html(
       page(
         "Store",
-        `<h1>Store</h1><p class="muted">Pay per file with USDC via x402 — click a file to get a payment challenge. Agents: use <a href="/catalog.json">/catalog.json</a>.</p>${cards}`,
+        `<h1>Store</h1><p class="lede">Pay per file with USDC via x402 — click a file to get a payment page. Agents: use <a href="/catalog.json">/catalog.json</a>.</p>${cards}`,
       ),
     );
   };

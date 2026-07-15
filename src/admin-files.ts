@@ -3,6 +3,7 @@ import { basename, extname, join } from "node:path";
 import { Hono } from "hono";
 import type { ProductConfig } from "./config.js";
 import { listSafe, resolveSafe } from "./resolve-safe.js";
+import { page } from "./ui.js";
 
 export interface FilesDeps {
   products(): ProductConfig[];
@@ -40,19 +41,17 @@ export function adminFiles(deps: FilesDeps): Hono {
         (rel) => `<tr><td>${escapeHtml(rel)}</td><td>
           <form method="post" action="/admin/files/${encodeURIComponent(p.sku)}/delete" style="display:inline">
           <input type="hidden" name="path" value="${escapeHtml(rel)}">
-          <button onclick="return confirm('Delete ${escapeHtml(rel)}?')">delete</button></form></td></tr>`,
+          <button class="danger" onclick="return confirm('Delete ${escapeHtml(rel)}?')">delete</button></form></td></tr>`,
       )
       .join("");
-    return c.html(`<!doctype html><html><head><title>Files — ${escapeHtml(p.title)}</title><style>
-      body{font-family:system-ui,sans-serif;margin:2rem;max-width:50rem}
-      table{border-collapse:collapse}td{border:1px solid #ccc;padding:.3rem .6rem}
-      form.upload{margin:1rem 0;padding:1rem;border:1px dashed #999}</style></head><body>
+    const body = `
       <h1>Files — ${escapeHtml(p.title)}</h1>
-      <p><a href="/admin">← Admin</a> · every file here is for sale at ${escapeHtml(String(p.pricing ? p.pricing.floor + "+" : p.price))}</p>
-      <form class="upload" method="post" action="/admin/files/${encodeURIComponent(p.sku)}/upload" enctype="multipart/form-data">
+      <p class="lede"><a href="/admin">← Admin</a> · every file here is for sale at <span class="badge plain">${escapeHtml(String(p.pricing ? p.pricing.floor + "+" : p.price))}</span></p>
+      <form class="panel" method="post" action="/admin/files/${encodeURIComponent(p.sku)}/upload" enctype="multipart/form-data">
         <input type="file" name="file" required> <button>Upload — instantly for sale</button>
       </form>
-      <table>${rows || "<tr><td>empty — upload a file to start selling</td></tr>"}</table></body></html>`);
+      <div class="card wrap"><table><thead><tr><th>file</th><th></th></tr></thead><tbody>${rows || '<tr><td class="muted">empty — upload a file to start selling</td></tr>'}</tbody></table></div>`;
+    return c.html(page(`Files — ${p.title}`, body, { admin: true }));
   });
 
   app.post("/files/:sku/upload", async (c) => {
