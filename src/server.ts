@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { createPaywall, evmPaywall } from "@x402/paywall";
 import { HTTPFacilitatorClient } from "@x402/core/server";
+import { createFacilitatorConfig } from "@coinbase/x402";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 import { loadEnv, loadProducts, type EnvConfig, type ProductConfig } from "./config.js";
 import { assertNotDevWalletOnMainnet } from "./provision.js";
@@ -24,6 +25,7 @@ import { adminApp } from "./admin.js";
 import { adminCrud } from "./admin-crud.js";
 import { adminFiles } from "./admin-files.js";
 import { startRepricer } from "./pricing.js";
+import { settingsRoutes } from "./settings.js";
 import type { PriceOverrides } from "./routes.js";
 
 export interface AppHandle {
@@ -69,11 +71,19 @@ function toStoreProducts(products: ProductConfig[], env: EnvConfig, store: Store
   }));
 }
 
+/** Testnet: plain URL client (x402.org, no auth). Mainnet: Coinbase CDP facilitator,
+ *  authenticated via CDP_API_KEY_ID/SECRET (createFacilitatorConfig wraps them). */
+function buildFacilitatorClient(env: EnvConfig): HTTPFacilitatorClient {
+  if (env.network === "eip155:8453") {
+    return new HTTPFacilitatorClient(createFacilitatorConfig(env.cdpApiKeyId!, env.cdpApiKeySecret!) as never);
+  }
+  return new HTTPFacilitatorClient({ url: env.facilitatorUrl });
+}
+
 export function createApp(opts: CreateAppOptions): AppHandle {
   const { env, store, baseDir, productsPath } = opts;
 
-  const facilitator =
-    opts.facilitatorClient ?? new HTTPFacilitatorClient({ url: env.facilitatorUrl });
+  const facilitator = opts.facilitatorClient ?? buildFacilitatorClient(env);
   const resourceServer = new x402ResourceServer(facilitator as never);
   registerExactEvmScheme(resourceServer);
 
@@ -130,6 +140,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
   admin.route("/", adminFiles({ products: () => products }));
+  admin.route("/", settingsRoutes(baseDir));
   app.route("/admin", admin);
 
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.

@@ -77,10 +77,16 @@ ${errorBox(opts.error)}
     <label style="font-weight:400"><input type="radio" name="type" value="file" ${v.type === "file" ? "checked" : ""}> A single file — upload it now</label>
   </label>
   <label>Title <input name="title" required value="${escapeHtml(v.title)}" placeholder="Soil Guides"></label>
-  <label>Price in USD <input name="price" required value="${escapeHtml(v.price)}" placeholder="0.05"></label>
+  <label>Pricing
+    <label style="font-weight:400"><input type="radio" name="pricingMode" value="fixed" ${v.pricingMode !== "demand" ? "checked" : ""}> Fixed price</label>
+    <label style="font-weight:400"><input type="radio" name="pricingMode" value="demand" ${v.pricingMode === "demand" ? "checked" : ""}> Demand pricing — adjusts automatically between a floor and ceiling based on sales</label>
+  </label>
+  <label>Price in USD (fixed) <input name="price" value="${escapeHtml(v.price)}" placeholder="0.05"></label>
+  <label>Floor / ceiling (demand) <span style="display:flex;gap:.5rem"><input name="floor" value="${escapeHtml(v.floor)}" placeholder="0.001"> <input name="ceiling" value="${escapeHtml(v.ceiling)}" placeholder="0.10"></span></label>
   <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — shown on the store"></label>
   <label>File (single-file products) <input type="file" name="file"></label>
   <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
+  <label style="font-weight:400"><input type="checkbox" name="discoverable" ${v.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar) so AI agents can find it</label>
   <div><button type="submit">Create product</button></div>
 </form></div>
 <p class="muted">Need full control (custom routes, existing paths)? Edit <code>products.json</code> directly — it hot-reloads.</p>`;
@@ -159,14 +165,25 @@ export function adminCrud(deps: CrudDeps): Hono {
     // Simple mode: derive sku/route/paths from type + title, create dirs, save upload.
     const fail = (error: string) => c.html(renderNewForm({ error, values: body }), 400);
     const title = typeof body.title === "string" ? body.title.trim() : "";
-    const priceRaw = typeof body.price === "string" ? body.price.trim() : "";
-    if (!title || !priceRaw) return fail("title and price are required");
+    if (!title) return fail("title is required");
     const sku = slugify(typeof body.sku === "string" && body.sku !== "" ? body.sku : title);
     if (!sku || RESERVED_SKUS.has(sku)) return fail(`"${sku}" is not a usable product name — pick another title`);
 
-    const entry: Record<string, unknown> = { sku, title, price: normalizePrice(priceRaw) };
+    const entry: Record<string, unknown> = { sku, title };
+    if (body.pricingMode === "demand") {
+      const floor = typeof body.floor === "string" ? body.floor.trim() : "";
+      const ceiling = typeof body.ceiling === "string" ? body.ceiling.trim() : "";
+      if (!floor || !ceiling) return fail("demand pricing needs a floor and a ceiling");
+      // step/window defaults are deliberate: 10% moves on a 15-minute window (edit products.json to tune)
+      entry.pricing = { mode: "demand", floor: normalizePrice(floor), ceiling: normalizePrice(ceiling), step: 0.1, windowMinutes: 15 };
+    } else {
+      const priceRaw = typeof body.price === "string" ? body.price.trim() : "";
+      if (!priceRaw) return fail("price is required for fixed pricing");
+      entry.price = normalizePrice(priceRaw);
+    }
     if (typeof body.description === "string" && body.description !== "") entry.description = body.description;
     if (body.preview === "on" || body.preview === "true") entry.preview = true;
+    if (body.discoverable === "on" || body.discoverable === "true") entry.discoverable = true;
 
     const productDir = join(deps.baseDir, "content", sku);
     if (body.type === "file") {

@@ -4,7 +4,9 @@
   "description": "Self-hostable x402 payment gateway: make any file, folder, or endpoint sellable. Config-driven products, per-request traffic log, admin stats, public sales feed.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "tsx src/server.ts",
     "setup": "tsx src/cli/setup.ts",
@@ -14,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@coinbase/x402": "^2.1.0",
     "@hono/node-server": "^1.14.0",
     "@x402/core": "2.18.0",
     "@x402/evm": "2.18.0",

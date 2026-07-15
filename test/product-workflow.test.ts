@@ -89,6 +89,22 @@ describe("add-product workflow (simple mode)", () => {
     expect(res.status).toBe(400);
   });
 
+  test("demand pricing: floor/ceiling from the form, sane step/window defaults, no fixed price", async () => {
+    const res = await f.app.request(
+      "/admin/products",
+      form({ type: "folder", title: "Surge", price: "0.05", pricingMode: "demand", floor: "0.001", ceiling: "0.10" }),
+    );
+    expect(res.status).toBe(302);
+    const [p] = f.catalog();
+    expect(p.pricing).toEqual({ mode: "demand", floor: "$0.001", ceiling: "$0.10", step: 0.1, windowMinutes: 15 });
+    expect(p.price).toBeUndefined();
+  });
+
+  test("discoverable checkbox lands on the entry", async () => {
+    await f.app.request("/admin/products", form({ type: "folder", title: "Found", price: "0.01", discoverable: "on" }));
+    expect(f.catalog()[0].discoverable).toBe(true);
+  });
+
   test("advanced mode (explicit route) still works", async () => {
     writeFileSync(join(f.dir, "raw.md"), "x");
     const res = await f.app.request(
