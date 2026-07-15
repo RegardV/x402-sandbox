@@ -99,6 +99,9 @@ describe("admin UI", () => {
     const html = await res.text();
     expect(html).toContain('href="/feed"');
     expect(html).toContain('href="/catalog"');
+    expect(html).toContain('href="/admin/settings"'); // the gear
+    expect(html).toContain('href="/admin/products/new"');
+    expect(html).toContain('href="/admin/export/sales.csv"');
   });
 
   test("each product row has a remove control posting to the delete route", async () => {
