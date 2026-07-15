@@ -32,6 +32,12 @@ describe("catalog UI", () => {
     expect(html).toContain('href="/feed"');
   });
 
+  test("brand: x402sandbox by realandworks.com with a live link", async () => {
+    const html = await (await f.app.request("/catalog")).text();
+    expect(html).toContain("x402sandbox");
+    expect(html).toContain('href="https://realandworks.com"');
+  });
+
   test("shows file sizes for directory products", async () => {
     const html = await (await f.app.request("/catalog")).text();
     expect(html).toContain("2.0 KB");

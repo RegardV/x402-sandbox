@@ -82,8 +82,8 @@ export function page(title: string, body: string, opts: PageOpts = {}): string {
     .map(([href, label]) => `<a class="nav" href="${href}">${label}</a>`)
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${CSS}</style></head><body>
-<header><div class="in"><span class="brand"><span class="dot"></span>x402 sandbox</span>${nav}</div></header>
+<header><div class="in"><span class="brand"><span class="dot"></span>x402sandbox&nbsp;<a href="https://realandworks.com" target="_blank" rel="noopener" style="font-weight:450;font-size:.8rem;color:var(--ink-3)">by&nbsp;realandworks.com</a></span>${nav}</div></header>
 <main>${body}</main>
-<footer>Powered by <a href="https://x402.org">x402</a> — pay-per-request over HTTP. USDC settles to the operator's own wallet.</footer>
+<footer><strong>x402sandbox</strong> by <a href="https://realandworks.com" target="_blank" rel="noopener">realandworks.com</a> · powered by <a href="https://x402.org">x402</a> — pay-per-request over HTTP. USDC settles to the operator's own wallet.</footer>
 </body></html>`;
 }
