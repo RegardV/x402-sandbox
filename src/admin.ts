@@ -71,7 +71,7 @@ export function adminApp(store: Store, adminPassword: string, network: string): 
 
     const body = `
 <h1>Admin</h1>
-<p class="lede">Operator view — full payer addresses and traffic stay behind this login. <a href="/admin/products/new">Add product</a> · <a href="/admin/export/sales.csv">Export sales CSV</a></p>
+<p class="lede">Operator view — full payer addresses and traffic stay behind this login. </p><p><a class="btn" href="/admin/products/new">+ Add product</a> <a href="/admin/products/new">Add product</a> · <a href="/admin/export/sales.csv">Export sales CSV</a>nbsp; <a href="/admin/export/sales.csv">Export sales CSV</a></p>
 
 <div class="tiles">
   ${tile(`$${totals.totalUsdc.toFixed(2)}`, "revenue")}

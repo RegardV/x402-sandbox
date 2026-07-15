@@ -17,7 +17,7 @@ function escapeHtml(s: string): string {
 }
 
 /** Same rules resolveSafe enforces on reads, applied to an upload name. */
-function safeUploadName(raw: string): string | null {
+export function safeUploadName(raw: string): string | null {
   const name = basename(raw.replaceAll("\\", "/")); // strip any path components
   if (!name || name.startsWith(".")) return null;
   if (DENIED_EXT.has(extname(name).toLowerCase())) return null;

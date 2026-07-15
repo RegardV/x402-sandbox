@@ -1,7 +1,10 @@
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Hono } from "hono";
 import type { Store } from "./db.js";
 import { loadProducts, type ProductConfig } from "./config.js";
+import { safeUploadName } from "./admin-files.js";
+import { page } from "./ui.js";
 
 export interface CrudDeps {
   store: Store;
@@ -58,27 +61,64 @@ function buildEntry(base: ProductConfig | undefined, sku: string, body: Record<s
   return entry as unknown as ProductConfig;
 }
 
+const errorBox = (error?: string) =>
+  error ? `<div class="card" style="border-color:var(--bad)"><span class="badge bad">error</span> ${escapeHtml(error)}</div>` : "";
+
+/** The operator-facing add-product workflow: type + title + price, everything else derived. */
+function renderNewForm(opts: { error?: string; values?: Record<string, unknown> } = {}): string {
+  const v = opts.values ?? {};
+  const body = `
+<h1>Add product</h1>
+<p class="lede"><a href="/admin">← Admin</a> · pick what you're selling — sku, URL, and folders are set up for you.</p>
+${errorBox(opts.error)}
+<div class="card"><form class="stack" method="post" action="/admin/products" enctype="multipart/form-data">
+  <label>What are you selling?
+    <label style="font-weight:400"><input type="radio" name="type" value="folder" ${v.type !== "file" ? "checked" : ""}> A folder — every file you drop in is for sale at one price</label>
+    <label style="font-weight:400"><input type="radio" name="type" value="file" ${v.type === "file" ? "checked" : ""}> A single file — upload it now</label>
+  </label>
+  <label>Title <input name="title" required value="${escapeHtml(v.title)}" placeholder="Soil Guides"></label>
+  <label>Price in USD <input name="price" required value="${escapeHtml(v.price)}" placeholder="0.05"></label>
+  <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — shown on the store"></label>
+  <label>File (single-file products) <input type="file" name="file"></label>
+  <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
+  <div><button type="submit">Create product</button></div>
+</form></div>
+<p class="muted">Need full control (custom routes, existing paths)? Edit <code>products.json</code> directly — it hot-reloads.</p>`;
+  return page("Add product", body, { admin: true });
+}
+
+/** Advanced edit form — full field set, used by /products/:sku/edit. */
 function renderForm(opts: { action: string; sku?: string; product?: Partial<ProductConfig>; error?: string }): string {
   const p = opts.product ?? {};
-  const field = (name: string, value: unknown) => `<input name="${name}" value="${escapeHtml(value)}">`;
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>${opts.sku ? "Edit" : "New"} product</title></head><body>
+  const field = (name: string, value: unknown) => `<label>${name} <input name="${name}" value="${escapeHtml(value)}"></label>`;
+  const body = `
 <h1>${opts.sku ? `Edit ${escapeHtml(opts.sku)}` : "New product"}</h1>
-${opts.error ? `<p style="color:red">${escapeHtml(opts.error)}</p>` : ""}
-<form method="post" action="${opts.action}">
-<p>sku ${opts.sku ? escapeHtml(opts.sku) : field("sku", p.sku)}</p>
-<p>title ${field("title", p.title)}</p>
-<p>description ${field("description", p.description)}</p>
-<p>price ${field("price", p.price)}</p>
-<p>route ${field("route", p.route)}</p>
-<p>contentPath ${field("contentPath", p.contentPath)}</p>
-<p>bundlePath ${field("bundlePath", p.bundlePath)}</p>
-<p>contentDir ${field("contentDir", p.contentDir)}</p>
-<p>mimeType ${field("mimeType", p.mimeType)}</p>
-<p><label><input type="checkbox" name="preview" ${p.preview ? "checked" : ""}> preview</label></p>
-<p><button type="submit">Save</button></p>
-</form>
-</body></html>`;
+<p class="lede"><a href="/admin">← Admin</a></p>
+${errorBox(opts.error)}
+<div class="card"><form class="stack" method="post" action="${opts.action}">
+${opts.sku ? "" : field("sku", p.sku)}
+${field("title", p.title)}
+${field("description", p.description)}
+${field("price", p.price)}
+${field("route", p.route)}
+${field("contentPath", p.contentPath)}
+${field("bundlePath", p.bundlePath)}
+${field("contentDir", p.contentDir)}
+${field("mimeType", p.mimeType)}
+<label style="font-weight:400"><input type="checkbox" name="preview" ${p.preview ? "checked" : ""}> preview</label>
+<div><button type="submit">Save</button></div>
+</form></div>`;
+  return page(opts.sku ? `Edit ${opts.sku}` : "New product", body, { admin: true });
+}
+
+const RESERVED_SKUS = new Set(["admin", "catalog", "feed", "catalog.json"]);
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+}
+
+function normalizePrice(raw: string): string {
+  return raw.startsWith("$") ? raw : `$${raw}`;
 }
 
 /** Validate-then-write helper shared by create/update/delete: builds the whole next catalog,
@@ -97,20 +137,59 @@ export function adminCrud(deps: CrudDeps): Hono {
   const app = new Hono();
   // Auth is applied by whoever mounts this app (same gate as adminApp) — no auth middleware here.
 
-  app.get("/products/new", (c) => c.html(renderForm({ action: "/products" })));
+  app.get("/products/new", (c) => c.html(renderNewForm()));
 
   app.post("/products", async (c) => {
     const body = (await c.req.parseBody()) as Record<string, unknown>;
-    const sku = typeof body.sku === "string" ? body.sku : "";
-    const entry = buildEntry(undefined, sku, body);
-    const catalog = readCatalog(deps.productsPath);
-    const result = validateAndWrite(deps, [...catalog, entry]);
-    if ("error" in result) {
-      return c.html(renderForm({ action: "/products", product: entry, error: result.error }), 400);
+
+    // Advanced mode: an explicit route means the caller manages paths themselves.
+    if (typeof body.route === "string" && body.route !== "") {
+      const sku = typeof body.sku === "string" ? body.sku : "";
+      const entry = buildEntry(undefined, sku, body);
+      const catalog = readCatalog(deps.productsPath);
+      const result = validateAndWrite(deps, [...catalog, entry]);
+      if ("error" in result) {
+        return c.html(renderForm({ action: "/admin/products", product: entry, error: result.error }), 400);
+      }
+      console.log(`[admin-audit] ${new Date().toISOString()} create ${sku}`);
+      deps.onCatalogChange?.();
+      return c.redirect("/admin", 302);
     }
+
+    // Simple mode: derive sku/route/paths from type + title, create dirs, save upload.
+    const fail = (error: string) => c.html(renderNewForm({ error, values: body }), 400);
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    const priceRaw = typeof body.price === "string" ? body.price.trim() : "";
+    if (!title || !priceRaw) return fail("title and price are required");
+    const sku = slugify(typeof body.sku === "string" && body.sku !== "" ? body.sku : title);
+    if (!sku || RESERVED_SKUS.has(sku)) return fail(`"${sku}" is not a usable product name — pick another title`);
+
+    const entry: Record<string, unknown> = { sku, title, price: normalizePrice(priceRaw) };
+    if (typeof body.description === "string" && body.description !== "") entry.description = body.description;
+    if (body.preview === "on" || body.preview === "true") entry.preview = true;
+
+    const productDir = join(deps.baseDir, "content", sku);
+    if (body.type === "file") {
+      const file = body.file;
+      if (!(file instanceof File) || file.size === 0) return fail("upload a file for a single-file product");
+      const name = safeUploadName(file.name);
+      if (!name) return fail("filename not allowed (no dotfiles, no .env/.key/.pem)");
+      mkdirSync(productDir, { recursive: true });
+      writeFileSync(join(productDir, name), Buffer.from(await file.arrayBuffer()));
+      entry.route = `GET /${sku}/${name}`;
+      entry.contentPath = `./content/${sku}/${name}`;
+    } else {
+      mkdirSync(productDir, { recursive: true });
+      entry.route = `GET /${sku}/*`;
+      entry.contentDir = `./content/${sku}`;
+    }
+
+    const catalog = readCatalog(deps.productsPath);
+    const result = validateAndWrite(deps, [...catalog, entry as unknown as ProductConfig]);
+    if ("error" in result) return fail(result.error);
     console.log(`[admin-audit] ${new Date().toISOString()} create ${sku}`);
     deps.onCatalogChange?.();
-    return c.redirect("/", 302);
+    return c.redirect(body.type === "file" ? "/admin" : `/admin/files/${encodeURIComponent(sku)}`, 302);
   });
 
   app.get("/products/:sku/edit", (c) => {
