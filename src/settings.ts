@@ -1,7 +1,7 @@
 import { readFileSync, renameSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { loadEnv } from "./config.js";
+import { loadEnv, type EnvConfig } from "./config.js";
 import { assertNotDevWalletOnMainnet } from "./provision.js";
 import { escapeHtml, page } from "./ui.js";
 
@@ -85,12 +85,25 @@ export function applySettings(baseDir: string, update: SettingsUpdate): Record<s
   return env;
 }
 
-/** Settings page — mounted under the admin auth gate. Secrets are never echoed. */
-export function settingsRoutes(baseDir: string): Hono {
+/** Settings page — mounted under the admin auth gate. Secrets are never echoed.
+ *  `booted` is the config the RUNNING server loaded at startup: whenever .env
+ *  differs from it, a persistent restart-pending banner shows. */
+export function settingsRoutes(baseDir: string, booted: EnvConfig): Hono {
   const app = new Hono();
+
+  const restartPending = (env: Record<string, string>): boolean =>
+    env["NETWORK"] !== booted.network ||
+    env["PAY_TO"] !== booted.payTo ||
+    env["FACILITATOR_URL"] !== booted.facilitatorUrl ||
+    (env["CDP_API_KEY_ID"] ?? "") !== (booted.cdpApiKeyId ?? "") ||
+    (env["CDP_API_KEY_SECRET"] ?? "") !== (booted.cdpApiKeySecret ?? "") ||
+    Number(env["PORT"] ?? 8402) !== booted.port;
 
   const render = (notice?: string, error?: string) => {
     const env = readEnvFile(join(baseDir, ".env"));
+    const pending = restartPending(env)
+      ? `<div class="card" style="border-color:var(--warn);background:var(--warn-soft)"><strong>⚠ Restart pending</strong> — the running server is still using the previous settings. Saved changes take effect after a restart: stop the process and run <code>npm start</code> (automatic under systemd).</div>`
+      : "";
     const mainnet = env["NETWORK"] === "eip155:8453";
     const modeBadge = mainnet
       ? '<span class="badge bad">MAINNET — real funds</span>'
@@ -101,6 +114,7 @@ export function settingsRoutes(baseDir: string): Hono {
 <p class="lede"><a href="/admin">← Admin</a> · gateway configuration. Changes are validated and written to <code>.env</code> — <strong>restart the server to apply</strong> (automatic under systemd).</p>
 ${error ? `<div class="card" style="border-color:var(--bad)"><span class="badge bad">error</span> ${escapeHtml(error)}</div>` : ""}
 ${notice ? `<div class="card" style="border-color:var(--good)"><span class="badge good">saved</span> ${escapeHtml(notice)}</div>` : ""}
+${pending}
 
 <div class="card">
 <h2>Network ${modeBadge}</h2>

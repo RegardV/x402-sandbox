@@ -142,7 +142,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
   admin.route("/", adminFiles({ products: () => products }));
-  admin.route("/", settingsRoutes(baseDir));
+  admin.route("/", settingsRoutes(baseDir, env));
   app.route("/admin", admin);
 
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.
