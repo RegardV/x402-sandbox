@@ -194,7 +194,8 @@ async function main() {
       Object.entries(process.env).filter(([k]) => !CONFIG_KEYS.includes(k)),
     ) as NodeJS.ProcessEnv;
     srv.close(() => {
-      const child = spawn(process.execPath, process.argv.slice(1), {
+      // tsx rewrites argv[1] to the .ts entry itself — re-attach the loader explicitly
+      const child = spawn(process.execPath, ["--import", "tsx", ...process.argv.slice(1)], {
         cwd: baseDir, env: childEnv, detached: true, stdio: "inherit",
       });
       child.unref();
@@ -205,7 +206,20 @@ async function main() {
   };
   const handle = createApp({ env, store, baseDir, productsPath, onRestart });
   const { app, reload, init } = handle;
-  await init(); // fail fast if the facilitator is unreachable or unsupported
+  // Transient network blips at boot are common (observed twice today) — retry with
+  // backoff before giving up; a genuinely bad facilitator config still fails within ~1 min.
+  const delays = [2000, 4000, 8000, 16000, 30000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await init();
+      break;
+    } catch (err) {
+      const delay = delays[attempt];
+      if (delay === undefined) throw err;
+      console.warn(`facilitator init failed (attempt ${attempt + 1}/${delays.length + 1}), retrying in ${delay / 1000}s: ${(err as Error).message}`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
 
   const windows = handle.products().flatMap((p) => (p.pricing ? [p.pricing.windowMinutes] : []));
   if (windows.length) {
