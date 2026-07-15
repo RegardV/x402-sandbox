@@ -88,7 +88,7 @@ export function applySettings(baseDir: string, update: SettingsUpdate): Record<s
 /** Settings page — mounted under the admin auth gate. Secrets are never echoed.
  *  `booted` is the config the RUNNING server loaded at startup: whenever .env
  *  differs from it, a persistent restart-pending banner shows. */
-export function settingsRoutes(baseDir: string, booted: EnvConfig): Hono {
+export function settingsRoutes(baseDir: string, booted: EnvConfig, onRestart?: () => void): Hono {
   const app = new Hono();
 
   const restartPending = (env: Record<string, string>): boolean =>
@@ -101,8 +101,11 @@ export function settingsRoutes(baseDir: string, booted: EnvConfig): Hono {
 
   const render = (notice?: string, error?: string) => {
     const env = readEnvFile(join(baseDir, ".env"));
+    const restartButton = onRestart
+      ? `<form method="post" action="/admin/restart" style="margin-top:.6rem" onsubmit="return confirm('Restart the server now? Buyers see a few seconds of downtime.')"><button>Restart server now</button></form>`
+      : `<span> Stop the process and run <code>npm start</code> (automatic under systemd).</span>`;
     const pending = restartPending(env)
-      ? `<div class="card" style="border-color:var(--warn);background:var(--warn-soft)"><strong>⚠ Restart pending</strong> — the running server is still using the previous settings. Saved changes take effect after a restart: stop the process and run <code>npm start</code> (automatic under systemd).</div>`
+      ? `<div class="card" style="border-color:var(--warn);background:var(--warn-soft)"><strong>⚠ Restart pending</strong> — the running server is still using the previous settings.${restartButton}</div>`
       : "";
     const mainnet = env["NETWORK"] === "eip155:8453";
     const modeBadge = mainnet
@@ -145,6 +148,20 @@ ${pending}
   };
 
   app.get("/settings", (c) => c.html(render()));
+
+  app.post("/restart", (c) => {
+    if (!onRestart) return c.notFound();
+    console.log(`[admin-audit] ${new Date().toISOString()} restart requested via settings`);
+    setTimeout(onRestart, 300); // let this response flush first
+    return c.html(
+      page(
+        "Restarting",
+        `<h1>Restarting…</h1><p class="lede">The server is coming back with the saved settings. This page returns to Settings automatically.</p>
+         <meta http-equiv="refresh" content="5;url=/admin/settings">`,
+        { admin: true },
+      ),
+    );
+  });
 
   app.post("/settings", async (c) => {
     const b = (await c.req.parseBody()) as Record<string, string>;

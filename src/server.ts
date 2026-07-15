@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, watch } from "node:fs";
+import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -54,6 +55,8 @@ export interface CreateAppOptions {
   baseDir: string;
   productsPath: string;
   facilitatorClient?: FacilitatorClientLike;
+  /** Wired by main(): gracefully stop listening, respawn, exit. Enables the settings restart button. */
+  onRestart?: () => void;
 }
 
 function toStoreProducts(products: ProductConfig[], env: EnvConfig, store: Store) {
@@ -142,7 +145,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
   admin.route("/", adminFiles({ products: () => products }));
-  admin.route("/", settingsRoutes(baseDir, env));
+  admin.route("/", settingsRoutes(baseDir, env, opts.onRestart));
   app.route("/admin", admin);
 
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.
@@ -181,7 +184,26 @@ async function main() {
   assertNotDevWalletOnMainnet(baseDir, env.network, env.payTo); // a generated key never receives real funds
   const productsPath = resolve(baseDir, process.env.PRODUCTS_PATH ?? "products.json");
   const store = new Store(env.dbPath);
-  const handle = createApp({ env, store, baseDir, productsPath });
+  // Self-restart: stop accepting connections, respawn detached, exit. The child's
+  // environment is stripped of all config keys so process.loadEnvFile re-reads .env
+  // fresh (loadEnvFile never overrides variables that already exist).
+  const CONFIG_KEYS = ["PAY_TO", "PAY_TO_TESTNET", "PAY_TO_MAINNET", "NETWORK", "FACILITATOR_URL",
+    "ADMIN_PASSWORD", "IP_SALT", "PORT", "DB_PATH", "CDP_API_KEY_ID", "CDP_API_KEY_SECRET"];
+  const onRestart = () => {
+    const childEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) => !CONFIG_KEYS.includes(k)),
+    ) as NodeJS.ProcessEnv;
+    srv.close(() => {
+      const child = spawn(process.execPath, process.argv.slice(1), {
+        cwd: baseDir, env: childEnv, detached: true, stdio: "inherit",
+      });
+      child.unref();
+      console.log("restarting: handed off to new process");
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 3000).unref(); // close() hangs on open keep-alives — hard exit fallback
+  };
+  const handle = createApp({ env, store, baseDir, productsPath, onRestart });
   const { app, reload, init } = handle;
   await init(); // fail fast if the facilitator is unreachable or unsupported
 
@@ -207,7 +229,7 @@ async function main() {
     timer = setTimeout(reload, 300); // fs.watch fires in bursts; debounce
   });
 
-  serve({ fetch: app.fetch, port: env.port, hostname: "127.0.0.1" });
+  const srv = serve({ fetch: app.fetch, port: env.port, hostname: "127.0.0.1" });
   console.log(`x402-sandbox on http://127.0.0.1:${env.port} (network ${env.network})`);
   console.log(`catalog: /catalog  feed: /feed  admin: /admin (user "admin")`);
 }
