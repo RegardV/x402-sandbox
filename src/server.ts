@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
+import { createPaywall, evmPaywall } from "@x402/paywall";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
 import { loadEnv, loadProducts, type EnvConfig, type ProductConfig } from "./config.js";
@@ -66,9 +67,12 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const resourceServer = new x402ResourceServer(facilitator as never);
   registerExactEvmScheme(resourceServer);
 
+  const paywallConfig = { appName: "x402 sandbox", testnet: env.network === "eip155:84532" };
+  const paywall = createPaywall().withNetwork(evmPaywall).withConfig(paywallConfig).build();
+
   const buildPaid = (products: ProductConfig[]) =>
     // syncFacilitatorOnStart=false: no network call at construction (reload-safe)
-    paymentMiddleware(buildRoutes(products, env) as never, resourceServer, undefined, undefined, false);
+    paymentMiddleware(buildRoutes(products, env) as never, resourceServer, paywallConfig, paywall, false);
 
   let products = loadProducts(readFileSync(productsPath, "utf8"), baseDir);
   let paid = buildPaid(products);

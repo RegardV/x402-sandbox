@@ -41,6 +41,7 @@ th{background:#f4f4f4}
 .tile{display:inline-block;border:1px solid #ccc;padding:.6rem 1rem;margin:0 .5rem 1rem 0}
 </style></head><body>
 <h1>Admin</h1>
+<p><a href="/catalog">Store</a> · <a href="/feed">Public sales feed</a></p>
 
 <h2>Products</h2>
 ${table(

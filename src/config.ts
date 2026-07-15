@@ -13,6 +13,8 @@ export interface ProductConfig {
   contentDir?: string;
   mimeType?: string;
   discoverable?: boolean;
+  /** Show a short text excerpt of md/txt files on the catalog (deliberate teaser). */
+  preview?: boolean;
   extensions?: Record<string, unknown>;
 }
 
@@ -104,6 +106,9 @@ export function loadProducts(jsonText: string, baseDir: string): ProductConfig[]
     }
     if (typeof p.route !== "string" || !/^(GET|POST|PUT|DELETE|PATCH) \/\S+$/.test(p.route)) {
       fail(sku, "route", 'must match "<METHOD> /path"');
+    }
+    if (p.preview !== undefined && typeof p.preview !== "boolean") {
+      fail(sku, "preview", "must be a boolean");
     }
     const sources = [p.contentPath, p.bundlePath, p.contentDir].filter(
       (v) => v !== undefined,
