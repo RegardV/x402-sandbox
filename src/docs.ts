@@ -126,7 +126,7 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 <h2>Stats</h2>
 <p>The dashboard tiles show revenue, sales, and the 402→200 conversion funnel: <em>paid hits</em> are served purchases, <em>unpaid hits</em> are buyers who saw the price and walked. A low ratio means the price or the pitch is wrong. The requests table shows every hit with its outcome; sales export as CSV for bookkeeping.</p>
 <h2>Settings</h2>
-<p><code>/admin/settings</code>: network mode (testnet/mainnet), receiving wallet, CDP keys, facilitator. Changes are validated exactly like startup, written atomically to <code>.env</code>, and need a restart to apply. See <a href="/docs/networks">Networks</a>.</p>
+<p><code>/admin/settings</code> (the ⚙ gear): network mode, <strong>two separate receive-address channels</strong> (a testnet slot and a mainnet slot — the active network decides which one earns; flipping can never route revenue to the other channel's wallet), CDP keys (never echoed back), facilitator. Changes are validated exactly like startup and written atomically to <code>.env</code>. Until the server restarts, an amber <em>Restart pending</em> banner stays on the page — with a <strong>Restart server now</strong> button that gracefully hands off to a fresh process (response flushes, listener closes, respawn re-reads <code>.env</code>, old process exits). See <a href="/docs/networks">Networks</a>.</p>
 <h2>Files on disk (the escape hatch)</h2>
 <p>Everything the UI does maps to plain files you can also edit directly: <code>products.json</code> (hot-reloads on save), <code>content/&lt;sku&gt;/</code> folders, <code>.env</code>. The UI is a convenience, not a lock-in.</p>`,
   },
@@ -146,10 +146,11 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 </table>
 <h2>Flipping to mainnet</h2>
 <ol>
-<li>Create a CDP account + Secret API key at <code>portal.cdp.coinbase.com</code></li>
-<li>In <a href="/admin/settings">Settings</a>: paste the keys, set <code>payTo</code> to a self-custody wallet you control, select Mainnet, save</li>
-<li>Restart the server (automatic under systemd)</li>
+<li>Create a CDP account + <strong>Secret API Key</strong> at <code>portal.cdp.coinbase.com</code> (leave all Coinbase App/Trade permission toggles OFF — the key only authenticates to the facilitator and can never move funds; Ed25519 signature is fine; no client API key needed)</li>
+<li>In <a href="/admin/settings">Settings</a>: paste the keys, fill the <strong>mainnet receive address</strong> slot with a self-custody wallet you control, select Mainnet, save</li>
+<li>Click <strong>Restart server now</strong> in the amber banner (or restart however you run it — automatic under systemd)</li>
 </ol>
+<p>The testnet receive address lives in its own slot and survives the flip — the two channels never mix.</p>
 <h2>Refusals that protect you</h2>
 <ul>
 <li>Mainnet without CDP keys → refuses to start, names the missing variables</li>
