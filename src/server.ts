@@ -22,6 +22,7 @@ import {
 } from "./handlers.js";
 import { adminApp } from "./admin.js";
 import { adminCrud } from "./admin-crud.js";
+import { adminFiles } from "./admin-files.js";
 import { startRepricer } from "./pricing.js";
 import type { PriceOverrides } from "./routes.js";
 
@@ -128,6 +129,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   app.get("/feed", feedPage(deps));
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
+  admin.route("/", adminFiles({ products: () => products }));
   app.route("/admin", admin);
 
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.

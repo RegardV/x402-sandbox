@@ -48,7 +48,7 @@ th{background:#f4f4f4}
 <table><thead><tr><th>sku</th><th>title</th><th>price</th><th>network</th><th>kind</th><th>actions</th></tr></thead><tbody>
 ${
   store.activeProducts().length
-    ? store.activeProducts().map((p) => `<tr><td>${escapeHtml(p.sku)}</td><td>${escapeHtml(p.title)}</td><td>${escapeHtml(p.priceUsdc)}</td><td>${escapeHtml(p.network)}</td><td>${escapeHtml(kind(p))}</td><td><a href="/admin/products/${encodeURIComponent(p.sku)}/edit">edit</a></td></tr>`).join('')
+    ? store.activeProducts().map((p) => `<tr><td>${escapeHtml(p.sku)}</td><td>${escapeHtml(p.title)}</td><td>${escapeHtml(p.priceUsdc)}</td><td>${escapeHtml(p.network)}</td><td>${escapeHtml(kind(p))}</td><td><a href="/admin/products/${encodeURIComponent(p.sku)}/edit">edit</a>${p.contentDir ? ` · <a href="/admin/files/${encodeURIComponent(p.sku)}">files</a>` : ""}</td></tr>`).join('')
     : '<tr><td colspan="6">none</td></tr>'
 }
 </tbody></table>
