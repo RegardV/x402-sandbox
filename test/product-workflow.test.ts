@@ -27,6 +27,13 @@ function form(fields: Record<string, string>, file?: { name: string; content: st
   return { method: "POST", body: fd };
 }
 
+function folderForm(fields: Record<string, string>, files: Array<{ name: string; content: string }>) {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries({ type: "folder", ...fields })) fd.append(k, v);
+  for (const f of files) fd.append("files", new File([f.content], f.name));
+  return { method: "POST", body: fd };
+}
+
 describe("add-product workflow (simple mode)", () => {
   let f: ReturnType<typeof fixture>;
   beforeEach(() => (f = fixture()));
@@ -41,9 +48,53 @@ describe("add-product workflow (simple mode)", () => {
   test("form separates folder vs file into distinct sections that toggle with the choice", async () => {
     const html = await (await f.app.request("/admin/products/new")).text();
     expect(html).toContain('id="file-fields"'); // file upload lives in its own section…
+    expect(html).toContain('id="folder-fields"'); // …folder flow has its own too…
     expect(html).toContain('id="fixed-fields"');
     expect(html).toContain('id="demand-fields"'); // …and pricing fields split by mode
     expect(html).toMatch(/type-toggle|addEventListener/); // toggled live, not all shown at once
+  });
+
+  test("preview tick lives only in the folder flow (it is a no-op for single files)", async () => {
+    const html = await (await f.app.request("/admin/products/new")).text();
+    const folderSection = html.slice(html.indexOf('id="folder-fields"'), html.indexOf('id="file-fields"') > html.indexOf('id="folder-fields"') ? html.indexOf('id="file-fields"') : undefined);
+    const folderBlock = html.slice(html.indexOf('id="folder-fields"'));
+    expect(folderBlock.slice(0, folderBlock.indexOf("</div>") + 6 + 2000).includes('name="preview"') || folderSection.includes('name="preview"')).toBe(true);
+    // exactly one preview input on the page, and it sits inside the folder section
+    expect(html.split('name="preview"').length - 1).toBe(1);
+    expect(html.indexOf('name="preview"')).toBeGreaterThan(html.indexOf('id="folder-fields"'));
+  });
+
+  test("folder flow: files selected at creation land in the new folder, listed and sellable", async () => {
+    const res = await f.app.request(
+      "/admin/products",
+      folderForm({ title: "Field Notes", price: "0.02" }, [
+        { name: "one.md", content: "# one" },
+        { name: "two.pdf", content: "pdfbytes" },
+      ]),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/admin/files/field-notes");
+    expect(readFileSync(join(f.dir, "content", "field-notes", "one.md"), "utf8")).toBe("# one");
+    expect(existsSync(join(f.dir, "content", "field-notes", "two.pdf"))).toBe(true);
+  });
+
+  test("folder flow: a denied filename in the selection rejects the whole creation — no product, no files", async () => {
+    const res = await f.app.request(
+      "/admin/products",
+      folderForm({ title: "Poisoned", price: "0.02" }, [
+        { name: "ok.md", content: "x" },
+        { name: "backup.env", content: "SECRET" },
+      ]),
+    );
+    expect(res.status).toBe(400);
+    expect(f.catalog()).toHaveLength(0);
+    expect(existsSync(join(f.dir, "content", "poisoned"))).toBe(false);
+  });
+
+  test("folder flow without files still works (add later on the files page)", async () => {
+    const res = await f.app.request("/admin/products", folderForm({ title: "Empty Start", price: "0.01" }, []));
+    expect(res.status).toBe(302);
+    expect(f.catalog()[0].sku).toBe("empty-start");
   });
 
   test("editing a product can toggle Bazaar discoverability on and off after creation", async () => {

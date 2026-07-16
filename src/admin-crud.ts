@@ -86,12 +86,17 @@ ${errorBox(opts.error)}
   ${choice("type", "folder", !isFile, "A folder of files", "One price for the whole folder. Add and remove files any time — each file is instantly for sale. Best for collections: articles, datasets, a course.")}
   ${choice("type", "file", isFile, "A single file", "Upload one file now; it gets its own URL and price. Best for one document, book, or bundle.")}
 
+  <div id="folder-fields" ${isFile ? "hidden" : ""}>
+    <label>Files to start the folder with <input type="file" name="files" multiple></label>
+    <p class="muted">Optional — you can add and remove files any time after creation.</p>
+    <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
+  </div>
   <div id="file-fields" ${isFile ? "" : "hidden"}>
     <label>The file <input type="file" name="file"></label>
   </div>
 
   <label>Title <input name="title" required value="${escapeHtml(v.title)}" placeholder="Soil Guides"></label>
-  <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — shown on the store and in discovery"></label>
+  <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — the sales pitch; for PDFs it's all a buyer sees"></label>
 
   <label>Pricing</label>
   ${choice("pricingMode", "fixed", !isDemand, "Fixed price", "You set it, it stays put.")}
@@ -104,14 +109,15 @@ ${errorBox(opts.error)}
     <label>Floor / ceiling in USD <span style="display:flex;gap:.5rem"><input name="floor" value="${escapeHtml(v.floor)}" placeholder="0.001"> <input name="ceiling" value="${escapeHtml(v.ceiling)}" placeholder="0.10"></span></label>
   </div>
 
-  <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
   <label style="font-weight:400"><input type="checkbox" name="discoverable" ${v.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar) so AI agents can find it <span class="muted">— changeable later in edit</span></label>
   <div><button type="submit">Create product</button></div>
 </form></div>
 <p class="muted">Need full control (custom routes, existing paths)? Edit <code>products.json</code> directly — it hot-reloads.</p>
 <script class="type-toggle">
   const upd = () => {
-    document.getElementById("file-fields").hidden = document.querySelector('input[name=type]:checked').value !== "file";
+    const isFile = document.querySelector('input[name=type]:checked').value === "file";
+    document.getElementById("file-fields").hidden = !isFile;
+    document.getElementById("folder-fields").hidden = isFile;
     const demand = document.querySelector('input[name=pricingMode]:checked').value === "demand";
     document.getElementById("fixed-fields").hidden = demand;
     document.getElementById("demand-fields").hidden = !demand;
@@ -176,7 +182,7 @@ export function adminCrud(deps: CrudDeps): Hono {
   app.get("/products/new", (c) => c.html(renderNewForm()));
 
   app.post("/products", async (c) => {
-    const body = (await c.req.parseBody()) as Record<string, unknown>;
+    const body = (await c.req.parseBody({ all: true })) as Record<string, unknown>;
 
     // Advanced mode: an explicit route means the caller manages paths themselves.
     if (typeof body.route === "string" && body.route !== "") {
@@ -216,24 +222,38 @@ export function adminCrud(deps: CrudDeps): Hono {
     if (body.discoverable === "on" || body.discoverable === "true") entry.discoverable = true;
 
     const productDir = join(deps.baseDir, "content", sku);
+    // Validate every upload BEFORE creating anything — one bad file rejects the whole creation.
+    let writes: Array<{ name: string; file: File }> = [];
     if (body.type === "file") {
-      const file = body.file;
+      const raw = body.file;
+      const file = Array.isArray(raw) ? raw[0] : raw;
       if (!(file instanceof File) || file.size === 0) return fail("upload a file for a single-file product");
       const name = safeUploadName(file.name);
-      if (!name) return fail("filename not allowed (no dotfiles, no .env/.key/.pem)");
-      mkdirSync(productDir, { recursive: true });
-      writeFileSync(join(productDir, name), Buffer.from(await file.arrayBuffer()));
+      if (!name) return fail(`"${file.name}": filename not allowed (no dotfiles, no .env/.key/.pem)`);
+      writes = [{ name, file }];
       entry.route = `GET /${sku}/${name}`;
       entry.contentPath = `./content/${sku}/${name}`;
     } else {
-      mkdirSync(productDir, { recursive: true });
+      const raw = body.files;
+      const files = (Array.isArray(raw) ? raw : raw !== undefined ? [raw] : []).filter(
+        (f): f is File => f instanceof File && f.size > 0,
+      );
+      for (const file of files) {
+        const name = safeUploadName(file.name);
+        if (!name) return fail(`"${file.name}": filename not allowed (no dotfiles, no .env/.key/.pem) — nothing created`);
+        writes.push({ name, file });
+      }
       entry.route = `GET /${sku}/*`;
       entry.contentDir = `./content/${sku}`;
     }
 
+    mkdirSync(productDir, { recursive: true });
     const catalog = readCatalog(deps.productsPath);
     const result = validateAndWrite(deps, [...catalog, entry as unknown as ProductConfig]);
     if ("error" in result) return fail(result.error);
+    for (const { name, file } of writes) {
+      writeFileSync(join(productDir, name), Buffer.from(await file.arrayBuffer()));
+    }
     console.log(`[admin-audit] ${new Date().toISOString()} create ${sku}`);
     deps.onCatalogChange?.();
     return c.redirect(body.type === "file" ? "/admin" : `/admin/files/${encodeURIComponent(sku)}`, 302);
