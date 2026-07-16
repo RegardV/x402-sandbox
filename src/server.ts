@@ -94,10 +94,10 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerExactEvmScheme(resourceServer);
   // Payment failures are invisible without these — log the facilitator's actual reason.
   (resourceServer as never as { onVerifyFailure(h: (ctx: unknown) => void): void }).onVerifyFailure((ctx) =>
-    console.warn(`[payment] verify FAILED: ${JSON.stringify(ctx).slice(0, 600)}`),
+    console.warn(`[payment] verify FAILED: ${JSON.stringify(ctx).slice(0, 4000)}`),
   );
   (resourceServer as never as { onSettleFailure(h: (ctx: unknown) => void): void }).onSettleFailure((ctx) =>
-    console.warn(`[payment] settle FAILED: ${JSON.stringify(ctx).slice(0, 600)}`),
+    console.warn(`[payment] settle FAILED: ${JSON.stringify(ctx).slice(0, 4000)}`),
   );
 
   const paywallConfig = { appName: "x402 sandbox", testnet: env.network === "eip155:84532" };
