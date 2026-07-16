@@ -56,40 +56,69 @@ function buildEntry(base: ProductConfig | undefined, sku: string, body: Record<s
       if (!(typeof body[f] === "string" && body[f] !== "")) delete entry[f];
     }
   }
+  // Checkboxes: absent from the body means unchecked — remove, don't preserve stale true.
   if (body.preview === "on" || body.preview === "true") entry.preview = true;
   else delete entry.preview;
+  if (body.discoverable === "on" || body.discoverable === "true") entry.discoverable = true;
+  else delete entry.discoverable;
   return entry as unknown as ProductConfig;
 }
 
 const errorBox = (error?: string) =>
   error ? `<div class="card" style="border-color:var(--bad)"><span class="badge bad">error</span> ${escapeHtml(error)}</div>` : "";
 
-/** The operator-facing add-product workflow: type + title + price, everything else derived. */
+/** The operator-facing add-product workflow: pick a path, see only that path's fields. */
 function renderNewForm(opts: { error?: string; values?: Record<string, unknown> } = {}): string {
   const v = opts.values ?? {};
+  const isFile = v.type === "file";
+  const isDemand = v.pricingMode === "demand";
+  const choice = (name: string, value: string, checked: boolean, title: string, desc: string) => `
+    <label style="font-weight:400;display:flex;gap:.7rem;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;cursor:pointer">
+      <input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""} style="margin-top:.25rem">
+      <span><strong>${title}</strong><br><span class="muted">${desc}</span></span>
+    </label>`;
   const body = `
 <h1>Add product</h1>
 <p class="lede"><a href="/admin">← Admin</a> · pick what you're selling — sku, URL, and folders are set up for you.</p>
 ${errorBox(opts.error)}
 <div class="card"><form class="stack" method="post" action="/admin/products" enctype="multipart/form-data">
-  <label>What are you selling?
-    <label style="font-weight:400"><input type="radio" name="type" value="folder" ${v.type !== "file" ? "checked" : ""}> A folder — every file you drop in is for sale at one price</label>
-    <label style="font-weight:400"><input type="radio" name="type" value="file" ${v.type === "file" ? "checked" : ""}> A single file — upload it now</label>
-  </label>
+  <label>What are you selling?</label>
+  ${choice("type", "folder", !isFile, "A folder of files", "One price for the whole folder. Add and remove files any time — each file is instantly for sale. Best for collections: articles, datasets, a course.")}
+  ${choice("type", "file", isFile, "A single file", "Upload one file now; it gets its own URL and price. Best for one document, book, or bundle.")}
+
+  <div id="file-fields" ${isFile ? "" : "hidden"}>
+    <label>The file <input type="file" name="file"></label>
+  </div>
+
   <label>Title <input name="title" required value="${escapeHtml(v.title)}" placeholder="Soil Guides"></label>
-  <label>Pricing
-    <label style="font-weight:400"><input type="radio" name="pricingMode" value="fixed" ${v.pricingMode !== "demand" ? "checked" : ""}> Fixed price</label>
-    <label style="font-weight:400"><input type="radio" name="pricingMode" value="demand" ${v.pricingMode === "demand" ? "checked" : ""}> Demand pricing — adjusts automatically between a floor and ceiling based on sales</label>
-  </label>
-  <label>Price in USD (fixed) <input name="price" value="${escapeHtml(v.price)}" placeholder="0.05"></label>
-  <label>Floor / ceiling (demand) <span style="display:flex;gap:.5rem"><input name="floor" value="${escapeHtml(v.floor)}" placeholder="0.001"> <input name="ceiling" value="${escapeHtml(v.ceiling)}" placeholder="0.10"></span></label>
-  <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — shown on the store"></label>
-  <label>File (single-file products) <input type="file" name="file"></label>
+  <label>Description <input name="description" value="${escapeHtml(v.description)}" placeholder="optional — shown on the store and in discovery"></label>
+
+  <label>Pricing</label>
+  ${choice("pricingMode", "fixed", !isDemand, "Fixed price", "You set it, it stays put.")}
+  ${choice("pricingMode", "demand", isDemand, "Demand pricing", "Adjusts itself between a floor and a ceiling based on sales — dirt cheap when quiet, rises when selling.")}
+
+  <div id="fixed-fields" ${isDemand ? "hidden" : ""}>
+    <label>Price in USD <input name="price" value="${escapeHtml(v.price)}" placeholder="0.05"></label>
+  </div>
+  <div id="demand-fields" ${isDemand ? "" : "hidden"}>
+    <label>Floor / ceiling in USD <span style="display:flex;gap:.5rem"><input name="floor" value="${escapeHtml(v.floor)}" placeholder="0.001"> <input name="ceiling" value="${escapeHtml(v.ceiling)}" placeholder="0.10"></span></label>
+  </div>
+
   <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
-  <label style="font-weight:400"><input type="checkbox" name="discoverable" ${v.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar) so AI agents can find it</label>
+  <label style="font-weight:400"><input type="checkbox" name="discoverable" ${v.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar) so AI agents can find it <span class="muted">— changeable later in edit</span></label>
   <div><button type="submit">Create product</button></div>
 </form></div>
-<p class="muted">Need full control (custom routes, existing paths)? Edit <code>products.json</code> directly — it hot-reloads.</p>`;
+<p class="muted">Need full control (custom routes, existing paths)? Edit <code>products.json</code> directly — it hot-reloads.</p>
+<script class="type-toggle">
+  const upd = () => {
+    document.getElementById("file-fields").hidden = document.querySelector('input[name=type]:checked').value !== "file";
+    const demand = document.querySelector('input[name=pricingMode]:checked').value === "demand";
+    document.getElementById("fixed-fields").hidden = demand;
+    document.getElementById("demand-fields").hidden = !demand;
+  };
+  document.querySelectorAll('input[name=type],input[name=pricingMode]').forEach((el) => el.addEventListener("change", upd));
+  upd();
+</script>`;
   return page("Add product", body, { admin: true });
 }
 
@@ -111,7 +140,8 @@ ${field("contentPath", p.contentPath)}
 ${field("bundlePath", p.bundlePath)}
 ${field("contentDir", p.contentDir)}
 ${field("mimeType", p.mimeType)}
-<label style="font-weight:400"><input type="checkbox" name="preview" ${p.preview ? "checked" : ""}> preview</label>
+<label style="font-weight:400"><input type="checkbox" name="preview" ${p.preview ? "checked" : ""}> Show text excerpts on the store (preview)</label>
+<label style="font-weight:400"><input type="checkbox" name="discoverable" ${p.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar)</label>
 <div><button type="submit">Save</button></div>
 </form></div>`;
   return page(opts.sku ? `Edit ${opts.sku}` : "New product", body, { admin: true });

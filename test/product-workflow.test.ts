@@ -38,6 +38,30 @@ describe("add-product workflow (simple mode)", () => {
     expect(html).toContain('name="price"');
   });
 
+  test("form separates folder vs file into distinct sections that toggle with the choice", async () => {
+    const html = await (await f.app.request("/admin/products/new")).text();
+    expect(html).toContain('id="file-fields"'); // file upload lives in its own section…
+    expect(html).toContain('id="fixed-fields"');
+    expect(html).toContain('id="demand-fields"'); // …and pricing fields split by mode
+    expect(html).toMatch(/type-toggle|addEventListener/); // toggled live, not all shown at once
+  });
+
+  test("editing a product can toggle Bazaar discoverability on and off after creation", async () => {
+    await f.app.request("/admin/products", form({ type: "folder", title: "Late Reg", price: "0.01" }));
+    // edit form offers the checkbox
+    const editHtml = await (await f.app.request("/admin/products/late-reg/edit")).text();
+    expect(editHtml).toContain('name="discoverable"');
+    // turn it ON via edit
+    await f.app.request(
+      "/admin/products/late-reg",
+      form({ title: "Late Reg", price: "$0.01", discoverable: "on" }),
+    );
+    expect(f.catalog()[0].discoverable).toBe(true);
+    // and OFF again (unchecked checkbox sends nothing)
+    await f.app.request("/admin/products/late-reg", form({ title: "Late Reg", price: "$0.01" }));
+    expect(f.catalog()[0].discoverable).toBeUndefined();
+  });
+
   test("folder product: derives sku/route, creates the directory, redirects to its files page", async () => {
     const res = await f.app.request("/admin/products", form({ type: "folder", title: "Soil Guides", price: "0.05" }));
     expect(res.status).toBe(302);

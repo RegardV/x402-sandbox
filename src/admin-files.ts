@@ -48,7 +48,7 @@ export function adminFiles(deps: FilesDeps): Hono {
       <h1>Files — ${escapeHtml(p.title)}</h1>
       <p class="lede"><a href="/admin">← Admin</a> · every file here is for sale at <span class="badge plain">${escapeHtml(String(p.pricing ? p.pricing.floor + "+" : p.price))}</span></p>
       <form class="panel" method="post" action="/admin/files/${encodeURIComponent(p.sku)}/upload" enctype="multipart/form-data">
-        <input type="file" name="file" required> <button>Upload — instantly for sale</button>
+        <input type="file" name="file" multiple required> <button>Upload — instantly for sale</button>
       </form>
       <div class="card wrap"><table><thead><tr><th>file</th><th></th></tr></thead><tbody>${rows || '<tr><td class="muted">empty — upload a file to start selling</td></tr>'}</tbody></table></div>`;
     return c.html(page(`Files — ${p.title}`, body, { admin: true }));
@@ -57,14 +57,23 @@ export function adminFiles(deps: FilesDeps): Hono {
   app.post("/files/:sku/upload", async (c) => {
     const p = dirProduct(c.req.param("sku"));
     if (!p) return c.text("Not Found", 404);
-    const body = await c.req.parseBody();
-    const file = body["file"];
-    if (!(file instanceof File)) return c.text("no file", 400);
-    const name = safeUploadName(file.name);
-    if (!name) return c.text("filename not allowed (no dotfiles, no .env/.key/.pem)", 400);
-    if (file.size > MAX_UPLOAD) return c.text(`file too large (max ${MAX_UPLOAD / 1024 / 1024}MB)`, 400);
-    writeFileSync(join(p.contentDir!, name), Buffer.from(await file.arrayBuffer()));
-    console.log(`[admin-audit] ${new Date().toISOString()} upload ${p.sku}/${name} (${file.size}B)`);
+    const body = await c.req.parseBody({ all: true });
+    const raw = body["file"];
+    const files = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File);
+    if (!files.length) return c.text("no file", 400);
+
+    // All-or-nothing: validate the whole batch before writing anything.
+    const batch: Array<{ name: string; file: File }> = [];
+    for (const file of files) {
+      const name = safeUploadName(file.name);
+      if (!name) return c.text(`"${file.name}": filename not allowed (no dotfiles, no .env/.key/.pem) — nothing uploaded`, 400);
+      if (file.size > MAX_UPLOAD) return c.text(`"${file.name}": too large (max ${MAX_UPLOAD / 1024 / 1024}MB) — nothing uploaded`, 400);
+      batch.push({ name, file });
+    }
+    for (const { name, file } of batch) {
+      writeFileSync(join(p.contentDir!, name), Buffer.from(await file.arrayBuffer()));
+      console.log(`[admin-audit] ${new Date().toISOString()} upload ${p.sku}/${name} (${file.size}B)`);
+    }
     return c.redirect(`/admin/files/${encodeURIComponent(p.sku)}`);
   });
 

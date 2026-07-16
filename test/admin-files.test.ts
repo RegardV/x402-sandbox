@@ -40,6 +40,33 @@ describe("adminFiles", () => {
     expect(existsSync(join(f.dir, "new-article.md"))).toBe(true);
   });
 
+  test("multi-select: several files upload in one request", async () => {
+    const fd = new FormData();
+    fd.append("file", new File(["one"], "one.md"));
+    fd.append("file", new File(["two"], "two.md"));
+    fd.append("file", new File(["three"], "three.csv"));
+    const res = await f.app.request("/admin/files/lib/upload", { method: "POST", body: fd });
+    expect(res.status).toBe(302);
+    for (const name of ["one.md", "two.md", "three.csv"]) {
+      expect(existsSync(join(f.dir, name)), name).toBe(true);
+    }
+  });
+
+  test("multi-select is all-or-nothing: one denied filename rejects the whole batch", async () => {
+    const fd = new FormData();
+    fd.append("file", new File(["ok"], "fine.md"));
+    fd.append("file", new File(["bad"], "secrets.env"));
+    const res = await f.app.request("/admin/files/lib/upload", { method: "POST", body: fd });
+    expect(res.status).toBe(400);
+    expect(existsSync(join(f.dir, "fine.md"))).toBe(false);
+    expect(existsSync(join(f.dir, "secrets.env"))).toBe(false);
+  });
+
+  test("upload input allows selecting multiple files", async () => {
+    const html = await (await f.app.request("/admin/files/lib")).text();
+    expect(html).toContain("multiple");
+  });
+
   test("upload strips any path components — basename only", async () => {
     await f.app.request("/admin/files/lib/upload", upload("../escape.md"));
     expect(existsSync(join(f.dir, "..", "escape.md"))).toBe(false);
