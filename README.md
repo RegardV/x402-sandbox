@@ -62,7 +62,7 @@ Mainnet needs a free Coinbase CDP Secret API Key (facilitator auth only — it c
 
 Running in production on Base mainnet behind a Cloudflare Tunnel (systemd-managed): 250 tests, settled real-money sales verified end to end (smart-wallet buyer → CDP facilitator → on-chain USDC → ledger/feed/CSV), plus a live agent-native retrieval product (`POST /ask`, $0.02/query) proxied to a brains-only [x402-packager] service. Next: interactive setup wizard (Tier 1.5), `npx create-x402-sandbox` packaging and repo scrub (Tier 2).
 
-[x402-packager]: ../x402-packager
+[x402-packager]: https://github.com/RegardV/x402-packager
 
 ## Credits
 
