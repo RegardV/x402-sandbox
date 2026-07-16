@@ -194,6 +194,17 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   };
 }
 
+/** Cloudflared terminates TLS and forwards plain HTTP; without this the SDK
+ *  builds http:// resource URLs that HTTPS paywall pages can't fetch (mixed content). */
+export function proxyAwareFetch(app: Hono): (req: Request) => Response | Promise<Response> {
+  return (req) => {
+    if (req.headers.get("x-forwarded-proto") === "https" && req.url.startsWith("http://")) {
+      return app.fetch(new Request(`https://${req.url.slice(7)}`, req));
+    }
+    return app.fetch(req);
+  };
+}
+
 async function main() {
   if (existsSync(".env")) process.loadEnvFile(".env");
   const env = loadEnv();
@@ -276,7 +287,7 @@ async function main() {
     timer = setTimeout(reload, 300); // fs.watch fires in bursts; debounce
   });
 
-  const srv = serve({ fetch: app.fetch, port: env.port, hostname: "127.0.0.1" });
+  const srv = serve({ fetch: proxyAwareFetch(app), port: env.port, hostname: "127.0.0.1" });
   console.log(`x402-sandbox on http://127.0.0.1:${env.port} (network ${env.network})`);
   console.log(`catalog: /catalog  feed: /feed  admin: /admin (user "admin")`);
 }

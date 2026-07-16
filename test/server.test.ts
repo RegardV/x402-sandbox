@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
-import { createApp, type AppHandle } from "../src/server.js";
+import { createApp, proxyAwareFetch, type AppHandle } from "../src/server.js";
 import { Store } from "../src/db.js";
 import type { EnvConfig } from "../src/config.js";
 
@@ -149,5 +149,21 @@ describe("root redirect", () => {
     const res = await h.app.request("/");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/catalog");
+  });
+});
+
+describe("behind a TLS-terminating proxy", () => {
+  test("x-forwarded-proto: https makes the 402 embed https resource URLs", async () => {
+    const f = fixture();
+    await f.handle.init();
+    const fetchFn = proxyAwareFetch(f.handle.app);
+    const res = await fetchFn(
+      new Request("http://x402.example.com/goods/guide.md", {
+        headers: { "x-forwarded-proto": "https" },
+      }),
+    );
+    expect(res.status).toBe(402);
+    const req = JSON.parse(Buffer.from(res.headers.get("payment-required")!, "base64").toString());
+    expect(req.resource.url).toMatch(/^https:\/\/x402\.example\.com\//);
   });
 });
