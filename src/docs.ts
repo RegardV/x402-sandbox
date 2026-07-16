@@ -75,6 +75,14 @@ ${code(`{
 <p>One folder = one price. Every file dropped in is instantly listed and purchasable; removing it delists it — no reload. The store page lists directory contents live (dotfiles and secret extensions are never listed or served).</p>
 <h2>Demand pricing</h2>
 <p>Each window, the repricer counts settled sales: none → price decays by <code>step</code> toward <code>floor</code>; some → it rises toward <code>ceiling</code>. The floor/ceiling bounds are the safety property (quote-spam can manipulate the signal; bounds cap the damage). For one window after a change both old and new price verify, so in-flight quotes never fail. Current price persists in the DB across restarts.</p>
+<h2>Where products get listed — and how to confirm it</h2>
+<p>Three independent listing surfaces:</p>
+<ul>
+<li><strong>Your own <code>/catalog.json</code></strong> — always lists everything, instantly. Agents that know your URL need nothing else.</li>
+<li><strong>Bazaar</strong> (the facilitator's discovery index) — products with <code>discoverable</code> enabled carry a machine-readable discovery declaration; the index learns about them from their x402 traffic through the facilitator, so a new product typically appears after its first real payment challenges, not instantly. Set <code>PUBLIC_ORIGIN</code> in <code>.env</code> (e.g. <code>https://store.example.com</code>) so announced URLs are public, not localhost.</li>
+<li><strong>Chain explorers</strong> (x402scan and similar) — discover sellers from on-chain settlements; nothing to configure.</li>
+</ul>
+<p><strong>Confirming listings:</strong> the admin <a href="/admin/discovery">Discovery page</a> queries the facilitator's Bazaar index live and shows listed / not-yet-listed / discovery-off per product. Programmatically, a bazaar-extended facilitator client does the same: <code>withBazaar(client).extensions.bazaar.listResources()</code> from <code>@x402/extensions/bazaar</code>.</p>
 <h2>payTo is never in the catalog</h2>
 <p>The receiving wallet and payment scheme come from <code>.env</code> — the catalog is safe to commit and share.</p>`,
   },

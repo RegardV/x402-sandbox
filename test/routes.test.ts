@@ -80,3 +80,27 @@ describe("buildRoutes", () => {
     expect(buildRoutes([], env)).toEqual({});
   });
 });
+
+describe("bazaar discovery declarations", () => {
+  test("discoverable products auto-gain a real extensions.bazaar declaration", () => {
+    const p: ProductConfig = { sku: "d2", title: "D2", price: "$0.01", route: "GET /d2/*", contentDir: "/x", discoverable: true };
+    const routes = buildRoutes([p], env);
+    const ext = (routes["GET /d2/*"] as any).extensions;
+    expect(ext.discoverable).toBe(true);
+    expect(ext.bazaar).toBeDefined();
+    expect(JSON.stringify(ext.bazaar)).toContain("GET");
+  });
+
+  test("operator-supplied extensions.bazaar wins over the auto declaration", () => {
+    const routes = buildRoutes([dir], env);
+    expect((routes["GET /docs/*"] as any).extensions.bazaar).toEqual({ tags: ["docs"] });
+  });
+
+  test("publicOrigin sets the public resource URL on exact routes", () => {
+    const withOrigin = { ...env, publicOrigin: "https://store.example.com" };
+    const routes = buildRoutes([file], withOrigin);
+    expect((routes["GET /files/a.md"] as any).resource).toBe("https://store.example.com/files/a.md");
+    const dirRoutes = buildRoutes([dir], withOrigin);
+    expect((dirRoutes["GET /docs/*"] as any).resource).toBeUndefined(); // wildcards derive per-request
+  });
+});

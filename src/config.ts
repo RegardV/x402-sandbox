@@ -35,6 +35,8 @@ export interface EnvConfig {
   ipSalt: string;
   port: number;
   dbPath: string;
+  /** Public base URL (e.g. https://store.example.com) — used for discovery announcements. */
+  publicOrigin?: string;
   cdpApiKeyId?: string;
   cdpApiKeySecret?: string;
 }
@@ -65,8 +67,13 @@ export function loadEnv(
   if (network === "eip155:8453" && (!cdpApiKeyId || !cdpApiKeySecret)) {
     throw new Error("mainnet requires CDP_API_KEY_ID/CDP_API_KEY_SECRET");
   }
+  const publicOrigin = env.PUBLIC_ORIGIN?.replace(/\/+$/, "");
+  if (publicOrigin !== undefined && !/^https?:\/\/\S+$/.test(publicOrigin)) {
+    throw new Error('PUBLIC_ORIGIN must be a full origin like "https://store.example.com"');
+  }
   return {
     payTo: payTo as `0x${string}`,
+    publicOrigin,
     network,
     facilitatorUrl: env.FACILITATOR_URL ?? "https://x402.org/facilitator",
     adminPassword,

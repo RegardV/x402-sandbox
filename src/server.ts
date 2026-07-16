@@ -27,6 +27,8 @@ import { adminCrud } from "./admin-crud.js";
 import { adminFiles } from "./admin-files.js";
 import { startRepricer } from "./pricing.js";
 import { settingsRoutes } from "./settings.js";
+import { adminDiscovery } from "./admin-discovery.js";
+import { withBazaar } from "@x402/extensions/bazaar";
 import { docsRoutes } from "./docs.js";
 import type { PriceOverrides } from "./routes.js";
 
@@ -147,6 +149,15 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
   admin.route("/", adminFiles({ products: () => products, store }));
   admin.route("/", settingsRoutes(baseDir, env, opts.onRestart));
+  admin.route(
+    "/",
+    adminDiscovery({
+      products: () => products,
+      payTo: env.payTo,
+      publicOrigin: env.publicOrigin,
+      list: () => (withBazaar(facilitator as never) as never as { extensions: { bazaar: { listResources(): Promise<{ items: never[] }> } } }).extensions.bazaar.listResources(),
+    }),
+  );
   app.route("/admin", admin);
 
   // Paid paths must never be edge-cached (a cached 402 breaks buying; a cached 200 leaks content).

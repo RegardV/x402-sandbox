@@ -1,3 +1,4 @@
+import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import type { EnvConfig, ProductConfig } from "./config.js";
 
 interface PaymentOption {
@@ -11,6 +12,7 @@ interface RouteConfigEntry {
   accepts: PaymentOption[];
   description?: string;
   mimeType?: string;
+  resource?: string;
   extensions?: Record<string, unknown>;
 }
 
@@ -47,7 +49,13 @@ export function buildRoutes(
     if (p.description !== undefined) entry.description = p.description;
     if (p.mimeType !== undefined) entry.mimeType = p.mimeType;
     if (p.discoverable || p.extensions) {
-      entry.extensions = { ...p.extensions, ...(p.discoverable ? { discoverable: true } : {}) };
+      // discoverable products get a real bazaar declaration (operator-supplied one wins)
+      // the published .d.ts omits `method`, but the runtime builder (and their docs) use it
+      const auto = p.discoverable ? declareDiscoveryExtension({ method: "GET" } as never) : {};
+      entry.extensions = { ...auto, ...p.extensions, ...(p.discoverable ? { discoverable: true } : {}) };
+    }
+    if (env.publicOrigin && !p.route.endsWith("/*")) {
+      entry.resource = `${env.publicOrigin}${p.route.slice(p.route.indexOf(" ") + 1)}`;
     }
     routes[p.route] = entry;
   }
