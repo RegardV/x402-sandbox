@@ -2,18 +2,20 @@
 
 **by [realandworks.com](https://realandworks.com)**
 
-Self-hostable [x402](https://x402.org) payment gateway: **make any file or folder sellable for USDC** in minutes. No accounts, no card processor, no platform cut — the HTTP `402 Payment Required` exchange *is* the checkout, so human buyers and AI agents pay the same way, and revenue settles straight to your own wallet.
+Self-hostable [x402](https://x402.org) payment gateway: **make any file, folder, or endpoint sellable for USDC** in minutes. No accounts, no card processor, no platform cut — the HTTP `402 Payment Required` exchange *is* the checkout, so human buyers and AI agents pay the same way, and revenue settles straight to your own wallet. Running in production at [x402.inkypyrus.com](https://x402.inkypyrus.com) with settled mainnet sales.
 
 ## What you get
 
 - **Web-first operation** — two clean add-product flows (folder with multi-select files, or single file), full file management (upload, rename, in-browser text editing, delete, per-file sales counts), remove products, flip networks, restart the server: all from the admin UI. The CLI and `products.json` remain as escape hatches, never requirements.
 - **Drop-in folders** — one folder = one price; every file dropped in (via web upload or filesystem) is instantly listed and purchasable, removing it instantly delists. No restarts.
+- **Proxy products (`proxyUrl`)** — paywall any live http(s) endpoint: the gateway sells (402, verify, settle, log), the upstream serves. Forwards method, body, query, and subpath; streams responses. Powers query-style products like a paid retrieval "front desk" (see [x402-packager]) where agents `POST /ask` and get cited passages per query.
+- **Paid-but-not-delivered protection** — a settled purchase grants the same buyer a free re-fetch of that URL for `REDELIVERY_MINUTES` (default 60): "click again", never "pay again".
 - **Fixed or demand pricing** — demand mode self-adjusts between your floor and ceiling based on sales, with a grace window so in-flight quotes never fail.
 - **Per-request analytics** — every hit is one SQLite row; the dashboard shows the 402→200 conversion funnel, not just totals. Sales export as CSV.
 - **Public storefront + sales feed** — styled, light/dark, self-contained (no CDN, no external requests); `catalog.json` and opt-in content excerpts for agent buyers; opt-in listing in x402 discovery registries.
 - **Two-channel wallet config** — separate testnet and mainnet receive addresses that can never mix; a settings page with a restart-pending banner and a graceful **Restart server now** button.
 - **Agent-installable** — a declarative config provisions a working gateway headlessly (`--json` output, idempotent, secrets via env only).
-- **Built-in developer docs** at `/docs` — every install serves its own documentation.
+- **Built-in developer docs** at `/docs` — every install serves its own documentation, including the buyer traps we hit selling for real (wallet-connect flows, the QR handoff, CDP's undocumented ~256-char description limit).
 
 ## Quick start (testnet — no real money, no signup)
 
@@ -58,7 +60,9 @@ Mainnet needs a free Coinbase CDP Secret API Key (facilitator auth only — it c
 
 ## Status
 
-Tier 1 complete and running in production: 229 tests, live-verified end to end with settled testnet purchases, deployed on Base mainnet behind a Cloudflare Tunnel (systemd-managed). Interactive setup wizard and `npx create-x402-sandbox` packaging are next (Tier 1.5 / Tier 2).
+Running in production on Base mainnet behind a Cloudflare Tunnel (systemd-managed): 250 tests, settled real-money sales verified end to end (smart-wallet buyer → CDP facilitator → on-chain USDC → ledger/feed/CSV), plus a live agent-native retrieval product (`POST /ask`, $0.02/query) proxied to a brains-only [x402-packager] service. Next: interactive setup wizard (Tier 1.5), `npx create-x402-sandbox` packaging and repo scrub (Tier 2).
+
+[x402-packager]: ../x402-packager
 
 ## Credits
 

@@ -56,7 +56,7 @@ ${code(`{
       // "pricing": { "mode": "demand", "floor": "$0.001", "ceiling": "$0.10",
       //              "step": 0.1, "windowMinutes": 15 },
       "route": "GET /library/*",        // "METHOD /path" — wildcard for folders
-      "contentDir": "./content/library",// exactly ONE of contentDir | contentPath | bundlePath
+      "contentDir": "./content/library",// exactly ONE of contentDir | contentPath | bundlePath | proxyUrl
       "network": "eip155:84532",        // optional, inherits .env NETWORK
       "mimeType": "text/markdown",      // optional; folders infer per file
       "preview": true,                  // optional: excerpt md/txt on the store
@@ -66,13 +66,19 @@ ${code(`{
 }`)}
 <h2>Rules the validator enforces</h2>
 <ul>
-<li>Exactly one of <code>price</code> / <code>pricing</code>, and exactly one of <code>contentPath</code> / <code>bundlePath</code> / <code>contentDir</code></li>
+<li>Exactly one of <code>price</code> / <code>pricing</code>, and exactly one of <code>contentPath</code> / <code>bundlePath</code> / <code>contentDir</code> / <code>proxyUrl</code></li>
 <li><code>contentDir</code> products must use a wildcard route (<code>GET /x/*</code>); file products must not</li>
 <li><code>network</code> matches <code>eip155:&lt;chainId&gt;</code>; prices are <code>"$0.05"</code> strings or positive numbers; skus unique</li>
 <li>demand pricing: floor &lt; ceiling, step in (0,1), window ≥ 1 minute</li>
 </ul>
 <h2>Directory products</h2>
 <p>One folder = one price. Every file dropped in is instantly listed and purchasable; removing it delists it — no reload. The store page lists directory contents live (dotfiles and secret extensions are never listed or served).</p>
+<h2>Proxy products — paywall any endpoint</h2>
+<p><code>proxyUrl</code> makes a live upstream service sellable — the founding idea taken literally:</p>
+${code(`{ "sku": "ask", "title": "Ask the corpus (per query)", "price": "$0.02",
+  "route": "POST /ask", "proxyUrl": "http://127.0.0.1:8403/soil/search",
+  "discoverable": true }`)}
+<p>After payment, the gateway forwards the request — method, JSON body, query string, and (for wildcard routes) the subpath — and streams the upstream response back. An unreachable upstream answers 502. The upstream should bind localhost and skip its own payment handling: the gateway sells, it serves. This is how a retrieval "front desk" (e.g. the x402-packager) plugs in: the gateway owns payments, logging, redelivery and discovery; the upstream owns the brains.</p>
 <h2>Demand pricing</h2>
 <p>Each window, the repricer counts settled sales: none → price decays by <code>step</code> toward <code>floor</code>; some → it rises toward <code>ceiling</code>. The floor/ceiling bounds are the safety property (quote-spam can manipulate the signal; bounds cap the damage). For one window after a change both old and new price verify, so in-flight quotes never fail. Current price persists in the DB across restarts.</p>
 <h2>Where products get listed — and how to confirm it</h2>
@@ -112,6 +118,8 @@ const res = await payFetch("https://store.example.com/library/guide.md");
 const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"));
 // receipt = { success: true, payer: "0x…", transaction: "0x…", network: "eip155:…" }`)}
 <p>The wallet needs USDC on the gateway's network (testnet: free from <a href="https://faucet.circle.com">faucet.circle.com</a>, Base Sepolia). No ETH needed.</p>
+<h2>Query products (the most agent-native shape)</h2>
+<p>Some products are endpoints, not files — e.g. paid retrieval: <code>POST /ask</code> with <code>{"query": "why do insects attack low brix plants", "top_k": 5}</code> returns the most relevant passages with source citations. Same x402 flow: the 402 challenge arrives on the POST, pay and retry with the payment header. Products like this declare an input schema in discovery metadata so agents know how to call them.</p>
 <h2>Pay — raw HTTP (any language)</h2>
 <ol>
 <li><code>GET</code> the paid URL → <code>402</code>; decode the base64 <code>payment-required</code> response header → JSON with <code>accepts[]</code> (scheme, network, amount in atomic units, asset contract, payTo)</li>
