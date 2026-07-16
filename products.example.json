@@ -1,0 +1,22 @@
+{
+  "products": [
+    {
+      "sku": "my-library",
+      "title": "My Library",
+      "description": "Example folder product — one price, every file inside is for sale. Copy this file to products.json and make it yours.",
+      "price": "$0.01",
+      "route": "GET /my-library/*",
+      "contentDir": "./content/my-library",
+      "preview": true
+    },
+    {
+      "sku": "ask-my-corpus",
+      "title": "Ask My Corpus (per query)",
+      "description": "Example proxy product — paid retrieval served by an x402-packager runtime on localhost.",
+      "price": "$0.02",
+      "route": "POST /ask",
+      "proxyUrl": "http://127.0.0.1:8403/my/search",
+      "discoverable": true
+    }
+  ]
+}

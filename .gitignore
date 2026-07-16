@@ -6,3 +6,5 @@ dist/
 .atg/
 *.log
 sandbox.db*
+products.json
+content/
