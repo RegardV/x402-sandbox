@@ -5,3 +5,4 @@ node_modules/
 dist/
 .atg/
 *.log
+sandbox.db*
