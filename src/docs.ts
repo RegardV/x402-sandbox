@@ -120,7 +120,9 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
     body: `
 <p class="lede">Everything an operator does day-to-day happens in the admin UI at <code>/admin</code> (HTTP Basic auth, user <code>admin</code>, password from <code>.env</code>).</p>
 <h2>Products</h2>
-<p><strong>+ Add product</strong> asks only what you're selling (a folder or a single file), a title, and a price — the sku, URL route, and content folder are derived and created for you. Single-file products take the upload in the same form. Folder products land on their file page, where every upload is instantly for sale and every delete instantly delists. <strong>remove</strong> takes a product off the store but leaves its files on disk (re-adding restores it).</p>
+<p><strong>+ Add product</strong> splits into two flows after the type choice. <em>Folder of files</em>: multi-select the starting files right in the form (optional — add more later), one price for everything inside, plus the text-excerpt preview option (folder-only: excerpts come from folder listings). <em>Single file</em>: one upload, its own URL. Both derive the sku, route, and content folder for you; both offer fixed or demand pricing and the Bazaar discovery toggle. <strong>remove</strong> takes a product off the store but leaves its files on disk (re-adding restores it).</p>
+<h2>Files (folder products)</h2>
+<p>Each folder's files page is the merchandising surface: header tiles (price, file count, total size, product revenue) and per file — its <strong>public URL</strong>, size, <strong>paid-sales count</strong>, a free admin-only content view, <strong>edit</strong> (in-browser content editing for text files, atomic saves), <strong>rename</strong> (any type; the public URL changes with the name), and delete. Multi-select uploads are all-or-nothing: one bad filename rejects the batch. Every mutation is audit-logged.</p>
 <h2>Pricing choices</h2>
 <p>Fixed, or demand pricing with a floor and ceiling (10% moves on a 15-minute window by default — tune <code>step</code>/<code>windowMinutes</code> in <code>products.json</code>).</p>
 <h2>Stats</h2>
@@ -158,7 +160,15 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 </ul>
 <p>Treat your first mainnet sale as the go-live test: buy from yourself for $0.01 and check the settlement on basescan.org before publicizing the URL.</p>
 <h2>Going public without a static IP</h2>
-<p>Bind stays <code>127.0.0.1</code>; expose via a Cloudflare Tunnel ingress hostname (outbound-only — works behind CGNAT/dynamic IP, zero open ports). Keep <code>/admin</code> off the tunnel. Add a cache-bypass rule for paid paths — an edge-cached 402 breaks buying.</p>`,
+<p>Bind stays <code>127.0.0.1</code>; expose via a Cloudflare Tunnel ingress hostname (outbound-only — works behind CGNAT/dynamic IP, zero open ports). Block <code>/admin</code> at the tunnel itself with a path rule ahead of the catch-all:</p>
+${code(`ingress:
+  - hostname: store.example.com
+    path: ^/admin.*
+    service: http_status:404
+  - hostname: store.example.com
+    service: http://127.0.0.1:8402
+  - service: http_status:404`)}
+<p>The gateway already sends <code>cache-control: no-store</code> on every product path, so an edge cache can never serve a stale 402 or leak paid content. Run gateway and tunnel as services (systemd <code>Restart=always</code>); under systemd the settings restart button hands off to the supervisor automatically.</p>`,
   },
   {
     slug: "security",
@@ -175,7 +185,9 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 <li><strong>No hot key on the server</strong> — the gateway holds only your receiving <em>address</em>; nothing on the box can spend funds</li>
 </ul>
 <h2>Privacy</h2>
-<p>Raw client IPs are never stored — only a salted hash. Full payer addresses (pseudonymous but linkable) appear only behind admin auth; the public feed truncates them to <code>0x1234…abcd</code>.</p>
+<p>Raw client IPs are never stored — only a salted hash. Full payer addresses (pseudonymous but linkable) appear only behind admin auth; the public feed truncates them to <code>0x1234…abcd</code>. The per-hit request log is <strong>pruned automatically</strong> after <code>RETENTION_DAYS</code> (default 90); the settlements ledger is permanent.</p>
+<h2>Admin brute-force lockout</h2>
+<p>Five failed logins from one source lock it out for 15 minutes (even with the correct password), per-IP, audit-logged, reset on success.</p>
 <h2>Config integrity</h2>
 <p>All catalog and settings writes are validated-before-write, atomic (temp file + rename), and audited to the journal (<code>[admin-audit]</code> lines). A changed <code>payTo</code> you didn't make is an incident, not an edit — it redirects revenue silently.</p>
 <h2>Your side of the contract</h2>
@@ -200,7 +212,8 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 <tr><td><em>product routes</em></td><td><strong>paid</strong></td><td>from <code>products.json</code> — 402 challenge / 200 + content</td></tr>
 <tr><td><code>GET /admin</code></td><td>Basic auth</td><td>dashboard: tiles, products, sales, requests</td></tr>
 <tr><td><code>GET/POST /admin/products…</code></td><td>Basic auth</td><td>add / edit / remove products</td></tr>
-<tr><td><code>GET/POST /admin/files/:sku…</code></td><td>Basic auth</td><td>list / upload / delete a folder product's files</td></tr>
+<tr><td><code>GET /</code></td><td>free</td><td>redirects to /catalog</td></tr>
+<tr><td><code>GET/POST /admin/files/:sku…</code></td><td>Basic auth</td><td>folder file management: list+stats, multi-upload, view (<code>/raw</code>), edit text content (<code>/file</code>, <code>/save</code>), rename, delete</td></tr>
 <tr><td><code>GET/POST /admin/settings</code></td><td>Basic auth</td><td>network mode, wallet, CDP keys</td></tr>
 <tr><td><code>GET /admin/export/sales.csv</code></td><td>Basic auth</td><td>settlements as CSV</td></tr>
 </tbody>
@@ -219,7 +232,7 @@ NETWORK=eip155:84532       # default testnet; eip155:8453 = mainnet
 FACILITATOR_URL=https://x402.org/facilitator   # testnet default
 ADMIN_PASSWORD=…           # min 12 chars (required)
 IP_SALT=…                  # for hashed request logging (required)
-PORT=8402  DB_PATH=./sandbox.db
+PORT=8402  DB_PATH=./sandbox.db  RETENTION_DAYS=90
 CDP_API_KEY_ID= CDP_API_KEY_SECRET=            # mainnet only`)}`,
   },
 ];

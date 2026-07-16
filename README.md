@@ -6,7 +6,7 @@ Self-hostable [x402](https://x402.org) payment gateway: **make any file or folde
 
 ## What you get
 
-- **Web-first operation** — add products (folder or single file, with upload), manage files, remove products, flip networks: all from the admin UI. The CLI and `products.json` remain as escape hatches, never requirements.
+- **Web-first operation** — two clean add-product flows (folder with multi-select files, or single file), full file management (upload, rename, in-browser text editing, delete, per-file sales counts), remove products, flip networks, restart the server: all from the admin UI. The CLI and `products.json` remain as escape hatches, never requirements.
 - **Drop-in folders** — one folder = one price; every file dropped in (via web upload or filesystem) is instantly listed and purchasable, removing it instantly delists. No restarts.
 - **Fixed or demand pricing** — demand mode self-adjusts between your floor and ceiling based on sales, with a grace window so in-flight quotes never fail.
 - **Per-request analytics** — every hit is one SQLite row; the dashboard shows the 402→200 conversion funnel, not just totals. Sales export as CSV.
@@ -52,7 +52,9 @@ Mainnet needs a free Coinbase CDP Secret API Key (facilitator auth only — it c
 - No hot key on the server: the gateway holds only your receiving *address*
 - Raw IPs never stored (salted hash); full payer addresses only behind admin auth
 - Config writes validated-before-write, atomic, audited; generated dev wallets are refused as mainnet receivers
-- Binds `127.0.0.1` only
+- Admin brute-force lockout (5 fails → 15 min, per source); request log auto-pruned after `RETENTION_DAYS` (settlements ledger permanent)
+- `cache-control: no-store` on product paths — edge caches can't serve a stale 402 or leak content
+- Binds `127.0.0.1` only — expose via a tunnel with `/admin` blocked at the ingress
 
 ## Status
 
