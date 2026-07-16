@@ -80,10 +80,20 @@ function toStoreProducts(products: ProductConfig[], env: EnvConfig, store: Store
 /** Testnet: plain URL client (x402.org, no auth). Mainnet: Coinbase CDP facilitator,
  *  authenticated via CDP_API_KEY_ID/SECRET (createFacilitatorConfig wraps them). */
 function buildFacilitatorClient(env: EnvConfig): HTTPFacilitatorClient {
-  if (env.network === "eip155:8453") {
-    return new HTTPFacilitatorClient(createFacilitatorConfig(env.cdpApiKeyId!, env.cdpApiKeySecret!) as never);
+  const client =
+    env.network === "eip155:8453"
+      ? process.env.FACILITATOR_URL_MAINNET // escape hatch: a non-CDP mainnet facilitator
+        ? new HTTPFacilitatorClient({ url: process.env.FACILITATOR_URL_MAINNET })
+        : new HTTPFacilitatorClient(createFacilitatorConfig(env.cdpApiKeyId!, env.cdpApiKeySecret!) as never)
+      : new HTTPFacilitatorClient({ url: env.facilitatorUrl });
+  if (process.env.PAYMENT_DEBUG === "1") {
+    const orig = client.verify.bind(client);
+    (client as { verify: typeof client.verify }).verify = async (payload: never, requirements: never) => {
+      console.log(`[payment] → verify request body: ${JSON.stringify({ paymentPayload: payload, paymentRequirements: requirements })}`);
+      return orig(payload, requirements);
+    };
   }
-  return new HTTPFacilitatorClient({ url: env.facilitatorUrl });
+  return client;
 }
 
 export function createApp(opts: CreateAppOptions): AppHandle {
