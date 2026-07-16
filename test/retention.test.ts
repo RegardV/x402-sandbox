@@ -28,3 +28,22 @@ describe("request-log retention", () => {
     expect(s.recentRequests(10)).toHaveLength(1);
   });
 });
+
+describe("redelivery grants", () => {
+  test("a recent paid hit from the same source grants free redelivery; strangers and stale hits don't", () => {
+    const s = new Store(":memory:");
+    s.syncProducts([{ sku: "p", title: "P", price: "$1", network: "eip155:8453", contentDir: "." }]);
+    const pid = s.productBySku("p")!.id;
+    const path = "/p/book.pdf";
+    s.insertRequest({ ts: new Date().toISOString(), method: "GET", path, outcome: "paid_200", productId: pid, ipHash: "buyer-hash", txHash: "0xabc" });
+
+    expect(s.findRedeliveryGrant(path, "buyer-hash", 60)?.txHash).toBe("0xabc");
+    expect(s.findRedeliveryGrant(path, "someone-else", 60)).toBeUndefined();
+    expect(s.findRedeliveryGrant("/p/other.pdf", "buyer-hash", 60)).toBeUndefined();
+
+    const stale = new Store(":memory:");
+    stale.syncProducts([{ sku: "p", title: "P", price: "$1", network: "eip155:8453", contentDir: "." }]);
+    stale.insertRequest({ ts: new Date(Date.now() - 2 * 3600_000).toISOString(), method: "GET", path, outcome: "paid_200", productId: stale.productBySku("p")!.id, ipHash: "buyer-hash", txHash: "0xold" });
+    expect(stale.findRedeliveryGrant(path, "buyer-hash", 60)).toBeUndefined();
+  });
+});

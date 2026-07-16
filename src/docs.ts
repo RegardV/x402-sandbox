@@ -128,6 +128,7 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 <li><strong>Mobile:</strong> open the store inside your wallet app's <em>built-in browser</em> and buy there. The paywall's QR code is only for lending a phone wallet to a <em>desktop</em> page — scanning it from inside a wallet app is a dead end ("already in wallet").</li>
 <li><strong>Delivery is the HTTP response</strong>: the file arrives in whichever browser context paid — a desktop tab, or the wallet's in-app browser (save/share from its menu).</li>
 <li>The wallet needs USDC on the store's network and <strong>zero gas</strong> — the payment is a gasless authorization.</li>
+<li><strong>Paid but the download failed?</strong> Just request the same URL again: for a window after a settled purchase (default 60 min, <code>REDELIVERY_MINUTES</code>), the same source gets the file again free — no second charge. Large files are the usual culprit; the payment always settles server-side first.</li>
 </ul>
 <p class="muted">The paywall page is Coinbase's stock component from <code>@x402/paywall</code>; its connect UX is theirs. If human sales matter to your deployment, a custom paywall provider is a supported middleware hook.</p>`,
   },

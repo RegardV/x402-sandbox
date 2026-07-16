@@ -74,10 +74,11 @@ export function matchProduct(
   method: string,
   path: string,
 ): ProductConfig | undefined {
+  const wanted = method === "HEAD" ? "GET" : method; // HEAD probes match their GET product
   return products.find((p) => {
     const m = p.route.slice(0, p.route.indexOf(" "));
     const pattern = routePath(p);
-    if (m !== method) return false;
+    if (m !== wanted) return false;
     if (pattern.endsWith("/*")) {
       const prefix = pattern.slice(0, -2);
       return path.startsWith(prefix + "/") && path.length > prefix.length + 1;

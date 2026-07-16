@@ -12,7 +12,7 @@ import { loadEnv, loadProducts, type EnvConfig, type ProductConfig } from "./con
 import { assertNotDevWalletOnMainnet } from "./provision.js";
 import { Store } from "./db.js";
 import { buildRoutes } from "./routes.js";
-import { requestLogger } from "./request-logger.js";
+import { hashIp, requestLogger } from "./request-logger.js";
 import {
   catalogHtml,
   catalogJson,
@@ -189,6 +189,24 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   });
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.
   app.use(precheck404(deps));
+  // HEAD probes and paid-but-not-delivered redelivery — both before the payment wall.
+  const redeliveryMinutes = Number(process.env.REDELIVERY_MINUTES ?? 60);
+  app.use(async (c, next) => {
+    const p = matchProduct(products, c.req.method, c.req.path);
+    if (!p) return next();
+    if (c.req.method === "HEAD") return c.body(null, 200); // existence probe: headers only, no payment
+    if (!c.req.header("x-payment")) {
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+      const grant = store.findRedeliveryGrant(c.req.path, hashIp(ip, env.ipSalt), redeliveryMinutes);
+      if (grant) {
+        // Same source already paid for exactly this URL within the window — deliver, don't re-charge.
+        console.log(`[payment] redelivery for ${c.req.path} (tx ${grant.txHash?.slice(0, 12)})`);
+        c.header("x-redelivery", "1");
+        return paidContent(deps)(c, next as never) as Promise<Response>;
+      }
+    }
+    await next();
+  });
   // Indirection so reload() can swap the middleware without re-mounting.
   app.use((c, next) => paid(c, next));
   app.all("*", paidContent(deps));

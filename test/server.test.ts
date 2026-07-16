@@ -167,3 +167,32 @@ describe("behind a TLS-terminating proxy", () => {
     expect(req.resource.url).toMatch(/^https:\/\/x402\.example\.com\//);
   });
 });
+
+describe("redelivery and HEAD probes", () => {
+  test("after a settled purchase, the buyer re-fetching the same URL gets the file free (no second 402)", async () => {
+    const f = fixture();
+    await f.handle.init();
+    const buyerHeaders = { "x-forwarded-for": "203.0.113.50" };
+    // simulate the settled purchase's request-log row (what the logger writes on paid_200)
+    const { hashIp } = await import("../src/request-logger.js");
+    f.store.insertRequest({
+      ts: new Date().toISOString(), method: "GET", path: "/goods/guide.md", outcome: "paid_200",
+      productId: f.store.productBySku("guide-dir")!.id, ipHash: hashIp("203.0.113.50", "salt"), txHash: "0xsettled",
+    });
+    const res = await f.handle.app.request("/goods/guide.md", { headers: buyerHeaders });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("# paid guide");
+    // a different source still gets the paywall
+    const stranger = await f.handle.app.request("/goods/guide.md", { headers: { "x-forwarded-for": "198.51.100.9" } });
+    expect(stranger.status).toBe(402);
+  });
+
+  test("HEAD probes on product URLs answer 200 for existing files, 404 for missing — never the full body", async () => {
+    const f = fixture();
+    await f.handle.init();
+    const ok = await f.handle.app.request("/goods/guide.md", { method: "HEAD" });
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toBe("");
+    expect((await f.handle.app.request("/goods/nope.md", { method: "HEAD" })).status).toBe(404);
+  });
+});

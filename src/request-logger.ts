@@ -75,7 +75,7 @@ export function requestLogger(deps: LoggerDeps): MiddlewareHandler {
     const outcome: RequestLog['outcome'] = !product
       ? status === 404 ? 'not_found' : 'free_200'
       : status === 402 ? 'unpaid_402'
-      : status >= 200 && status < 300 ? 'paid_200'
+      : status >= 200 && status < 300 ? (c.res.headers.get('x-redelivery') ? 'free_200' : 'paid_200')
       : status === 404 ? 'not_found'
       : 'error';
 

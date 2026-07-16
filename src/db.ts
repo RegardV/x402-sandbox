@@ -162,6 +162,22 @@ export class Store {
     return row ? toProductRow(row) : undefined;
   }
 
+  /** Paid-but-not-delivered protection: a recent settled purchase of this exact
+   *  path from the same (hashed) source grants free redelivery within the window. */
+  findRedeliveryGrant(
+    path: string,
+    ipHash: string,
+    windowMinutes: number,
+  ): { txHash: string; payer: string | null } | undefined {
+    const cutoff = new Date(Date.now() - windowMinutes * 60_000).toISOString();
+    const row = this.db
+      .prepare(
+        "SELECT tx_hash, payer FROM requests WHERE path = ? AND ip_hash = ? AND outcome = 'paid_200' AND ts >= ? ORDER BY id DESC LIMIT 1",
+      )
+      .get(path, ipHash, cutoff) as { tx_hash: string; payer: string | null } | undefined;
+    return row ? { txHash: row.tx_hash, payer: row.payer } : undefined;
+  }
+
   /** Paid hits per request path — the per-file sales signal for folder products. */
   paidCountsByPath(): Record<string, number> {
     const rows = this.db
