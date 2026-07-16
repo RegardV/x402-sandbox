@@ -190,3 +190,24 @@ describe("add-product workflow (simple mode)", () => {
     expect(f.catalog()[0].route).toBe("GET /raw.md");
   });
 });
+
+describe("filenames and folder selection", () => {
+  let f: ReturnType<typeof fixture>;
+  beforeEach(() => (f = fixture()));
+
+  test("single-file upload with spaces in the filename works — stored name is dashed", async () => {
+    const res = await f.app.request(
+      "/admin/products",
+      form({ type: "file", title: "Soil Book", price: "$1.00" }, { name: "The Soil Biome (final).pdf", content: "pdf" }),
+    );
+    expect(res.status).toBe(302);
+    const [p] = f.catalog();
+    expect(p.route).toBe("GET /soil-book/The-Soil-Biome-(final).pdf");
+    expect(existsSync(join(f.dir, "content", "soil-book", "The-Soil-Biome-(final).pdf"))).toBe(true);
+  });
+
+  test("folder flow offers a whole-folder picker as well as multi-file select", async () => {
+    const html = await (await f.app.request("/admin/products/new")).text();
+    expect(html).toContain("webkitdirectory");
+  });
+});

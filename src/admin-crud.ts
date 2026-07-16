@@ -88,7 +88,8 @@ ${errorBox(opts.error)}
 
   <div id="folder-fields" ${isFile ? "hidden" : ""}>
     <label>Files to start the folder with <input type="file" name="files" multiple></label>
-    <p class="muted">Optional — you can add and remove files any time after creation.</p>
+    <label>…or select an entire folder <input type="file" name="files" multiple webkitdirectory></label>
+    <p class="muted">Optional — you can add and remove files any time after creation. Folder selection copies the files in (flattened); subfolder structure is not kept.</p>
     <label style="font-weight:400"><input type="checkbox" name="preview" ${v.preview ? "checked" : ""}> Show a short text excerpt of md/txt files on the store</label>
   </div>
   <div id="file-fields" ${isFile ? "" : "hidden"}>
@@ -228,8 +229,9 @@ export function adminCrud(deps: CrudDeps): Hono {
       const raw = body.file;
       const file = Array.isArray(raw) ? raw[0] : raw;
       if (!(file instanceof File) || file.size === 0) return fail("upload a file for a single-file product");
-      const name = safeUploadName(file.name);
-      if (!name) return fail(`"${file.name}": filename not allowed (no dotfiles, no .env/.key/.pem)`);
+      const rawName = safeUploadName(file.name);
+      if (!rawName) return fail(`"${file.name}": filename not allowed (no dotfiles, no .env/.key/.pem)`);
+      const name = rawName.replace(/\s+/g, "-"); // spaces break exact routes and URLs
       writes = [{ name, file }];
       entry.route = `GET /${sku}/${name}`;
       entry.contentPath = `./content/${sku}/${name}`;
