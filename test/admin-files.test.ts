@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -132,5 +132,56 @@ describe("adminFiles", () => {
   test("non-directory products get 404 for file management", async () => {
     expect((await f.app.request("/admin/files/one")).status).toBe(404);
     expect((await f.app.request("/admin/files/unknown")).status).toBe(404);
+  });
+});
+
+describe("file editing and renaming", () => {
+  let f: ReturnType<typeof fixture>;
+  beforeEach(() => (f = fixture()));
+
+  const post = (path: string, fields: Record<string, string>) =>
+    f.app.request(path, {
+      method: "POST",
+      body: new URLSearchParams(fields),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+
+  test("manage page for a text file offers rename + a content editor with the current text", async () => {
+    const html = await (await f.app.request("/admin/files/lib/file?path=existing.md")).text();
+    expect(html).toContain("<textarea");
+    expect(html).toContain("# hello");
+    expect(html).toContain('name="newName"');
+  });
+
+  test("saving edited content rewrites the file", async () => {
+    const res = await post("/admin/files/lib/save", { path: "existing.md", content: "# updated body" });
+    expect(res.status).toBe(302);
+    expect(readFileSync(join(f.dir, "existing.md"), "utf8")).toBe("# updated body");
+  });
+
+  test("editing is guarded: traversal path 404s, nothing written", async () => {
+    expect((await post("/admin/files/lib/save", { path: "../../etc/passwd", content: "x" })).status).toBe(404);
+  });
+
+  test("rename works and keeps the file sellable under the new name", async () => {
+    const res = await post("/admin/files/lib/rename", { path: "existing.md", newName: "renamed.md" });
+    expect(res.status).toBe(302);
+    expect(existsSync(join(f.dir, "renamed.md"))).toBe(true);
+    expect(existsSync(join(f.dir, "existing.md"))).toBe(false);
+  });
+
+  test("rename refuses denied names and overwriting an existing file", async () => {
+    writeFileSync(join(f.dir, "other.md"), "x");
+    expect((await post("/admin/files/lib/rename", { path: "existing.md", newName: "sneaky.env" })).status).toBe(400);
+    expect((await post("/admin/files/lib/rename", { path: "existing.md", newName: "other.md" })).status).toBe(400);
+    expect(existsSync(join(f.dir, "existing.md"))).toBe(true);
+  });
+
+  test("binary files get rename but no content editor", async () => {
+    writeFileSync(join(f.dir, "book.pdf"), "pdfbytes");
+    const html = await (await f.app.request("/admin/files/lib/file?path=book.pdf")).text();
+    expect(html).toContain('name="newName"');
+    expect(html).not.toContain("<textarea");
+    expect((await post("/admin/files/lib/save", { path: "book.pdf", content: "x" })).status).toBe(400);
   });
 });

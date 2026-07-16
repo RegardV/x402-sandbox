@@ -1,4 +1,4 @@
-import { readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { Hono } from "hono";
 
@@ -11,6 +11,8 @@ export interface FilesDeps {
   products(): ProductConfig[];
   store: Store;
 }
+
+const TEXT_EXT = new Set([".md", ".txt", ".csv", ".json", ".html"]);
 
 const VIEW_MIME: Record<string, string> = {
   ".md": "text/plain", ".txt": "text/plain", ".csv": "text/plain", ".json": "text/plain",
@@ -62,7 +64,7 @@ export function adminFiles(deps: FilesDeps): Hono {
         const publicPath = `${base}/${rel.split("/").map(encodeURIComponent).join("/")}`;
         const sales = paid[publicPath] ?? paid[`${base}/${rel}`] ?? 0;
         return `<tr>
-          <td><a href="/admin/files/${encodeURIComponent(p.sku)}/raw?path=${encodeURIComponent(rel)}" title="view content (free, admin-only)">${escapeHtml(rel)}</a></td>
+          <td><a href="/admin/files/${encodeURIComponent(p.sku)}/raw?path=${encodeURIComponent(rel)}" title="view content (free, admin-only)">${escapeHtml(rel)}</a> <a class="muted" style="font-size:.8rem" href="/admin/files/${encodeURIComponent(p.sku)}/file?path=${encodeURIComponent(rel)}">edit</a></td>
           <td><code class="muted" style="font-size:.8rem">${escapeHtml(publicPath)}</code></td>
           <td class="size">${humanSize(size)}</td>
           <td class="num">${sales}</td>
@@ -119,6 +121,63 @@ export function adminFiles(deps: FilesDeps): Hono {
       writeFileSync(join(p.contentDir!, name), Buffer.from(await file.arrayBuffer()));
       console.log(`[admin-audit] ${new Date().toISOString()} upload ${p.sku}/${name} (${file.size}B)`);
     }
+    return c.redirect(`/admin/files/${encodeURIComponent(p.sku)}`);
+  });
+
+  // Per-file manage page: rename (all types) + content editor (text types).
+  app.get("/files/:sku/file", (c) => {
+    const p = dirProduct(c.req.param("sku"));
+    if (!p) return c.text("Not Found", 404);
+    const rel = c.req.query("path") ?? "";
+    const abs = resolveSafe(p.contentDir!, rel);
+    if (!abs) return c.text("Not Found", 404);
+    const isText = TEXT_EXT.has(extname(abs).toLowerCase());
+    const action = (verb: string) => `/admin/files/${encodeURIComponent(p.sku)}/${verb}`;
+    const editor = isText
+      ? `<div class="card"><h2>Content</h2><form method="post" action="${action("save")}" class="stack" style="max-width:none">
+          <input type="hidden" name="path" value="${escapeHtml(rel)}">
+          <textarea name="content" rows="20" style="font:.85rem/1.5 monospace;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:.8rem">${escapeHtml(readFileSync(abs, "utf8"))}</textarea>
+          <div><button>Save content</button></div></form></div>`
+      : `<p class="muted">Binary file — content can't be edited here; replace it by uploading a file with the same name.</p>`;
+    const body = `
+      <h1>${escapeHtml(rel)}</h1>
+      <p class="lede"><a href="/admin/files/${encodeURIComponent(p.sku)}">← Files — ${escapeHtml(p.title)}</a></p>
+      <div class="card"><h2>Rename</h2><form method="post" action="${action("rename")}" class="stack">
+        <input type="hidden" name="path" value="${escapeHtml(rel)}">
+        <label>New name <input name="newName" value="${escapeHtml(rel)}"></label>
+        <div><button>Rename</button></div></form>
+        <p class="muted">The public URL changes with the name — anyone holding the old link gets a 404.</p></div>
+      ${editor}`;
+    return c.html(page(`${rel} — ${p.title}`, body, { admin: true }));
+  });
+
+  app.post("/files/:sku/save", async (c) => {
+    const p = dirProduct(c.req.param("sku"));
+    if (!p) return c.text("Not Found", 404);
+    const b = (await c.req.parseBody()) as Record<string, string>;
+    const abs = resolveSafe(p.contentDir!, b.path ?? "");
+    if (!abs) return c.text("Not Found", 404);
+    if (!TEXT_EXT.has(extname(abs).toLowerCase())) return c.text("binary files can't be edited here", 400);
+    writeFileSync(`${abs}.tmp`, b.content ?? "");
+    renameSync(`${abs}.tmp`, abs);
+    console.log(`[admin-audit] ${new Date().toISOString()} edit-file ${p.sku}/${b.path}`);
+    return c.redirect(`/admin/files/${encodeURIComponent(p.sku)}`);
+  });
+
+  app.post("/files/:sku/rename", async (c) => {
+    const p = dirProduct(c.req.param("sku"));
+    if (!p) return c.text("Not Found", 404);
+    const b = (await c.req.parseBody()) as Record<string, string>;
+    const abs = resolveSafe(p.contentDir!, b.path ?? "");
+    if (!abs) return c.text("Not Found", 404);
+    const newName = safeUploadName(b.newName ?? "");
+    if (!newName) return c.text("new name not allowed (no dotfiles, no .env/.key/.pem)", 400);
+    const dest = join(p.contentDir!, newName);
+    let destTaken = true;
+    try { statSync(dest); } catch { destTaken = false; }
+    if (destTaken) return c.text(`"${newName}" already exists`, 400);
+    renameSync(abs, dest);
+    console.log(`[admin-audit] ${new Date().toISOString()} rename-file ${p.sku}/${b.path} -> ${newName}`);
     return c.redirect(`/admin/files/${encodeURIComponent(p.sku)}`);
   });
 
