@@ -104,3 +104,13 @@ describe("bazaar discovery declarations", () => {
     expect((dirRoutes["GET /docs/*"] as any).resource).toBeUndefined(); // wildcards derive per-request
   });
 });
+
+describe("facilitator schema limits", () => {
+  test("route descriptions are capped at 250 chars (CDP rejects longer)", () => {
+    const long = { ...file, description: "d".repeat(3000) };
+    const routes = buildRoutes([long], env);
+    const desc = (routes["GET /files/a.md"] as any).description as string;
+    expect(desc.length).toBeLessThanOrEqual(250);
+    expect(desc.endsWith("…")).toBe(true);
+  });
+});

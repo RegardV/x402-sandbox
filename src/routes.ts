@@ -46,7 +46,12 @@ export function buildRoutes(
     const accepts: PaymentOption[] = [{ scheme: "exact", payTo: env.payTo, price: price.current, network }];
     if (price.previous) accepts.push({ scheme: "exact", payTo: env.payTo, price: price.previous, network });
     const entry: RouteConfigEntry = { accepts };
-    if (p.description !== undefined) entry.description = p.description;
+    if (p.description !== undefined) {
+      // CDP's facilitator schema rejects payment payloads whose resource.description
+      // exceeds ~256 chars (verified empirically 2026-07-16). The storefront still
+      // shows the full text; only the protocol metadata is capped.
+      entry.description = p.description.length > 250 ? `${p.description.slice(0, 249)}…` : p.description;
+    }
     if (p.mimeType !== undefined) entry.mimeType = p.mimeType;
     if (p.discoverable || p.extensions) {
       // discoverable products get a real bazaar declaration (operator-supplied one wins)
