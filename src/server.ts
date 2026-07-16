@@ -138,6 +138,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   );
 
   // Free surfaces — registered before the payment layer, never gated.
+  app.get("/", (c) => c.redirect("/catalog", 302));
   app.get("/catalog", catalogHtml(deps));
   app.get("/catalog.json", catalogJson(deps));
   app.get("/feed", feedPage(deps));

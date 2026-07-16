@@ -131,3 +131,23 @@ describe("createApp", () => {
     expect(f.store.recentRequests(1)[0]?.outcome).toBe("not_found");
   });
 });
+
+describe("root redirect", () => {
+  test("the bare domain sends visitors to the store", async () => {
+    const { mkdtempSync: mk, writeFileSync: wf } = await import("node:fs");
+    const { tmpdir: td } = await import("node:os");
+    const { join: j } = await import("node:path");
+    const d = mk(j(td(), "x402-root-"));
+    wf(j(d, "products.json"), '{"products":[]}');
+    const { createApp } = await import("../src/server.js");
+    const { Store } = await import("../src/db.js");
+    const h = createApp({
+      env: { payTo: "0x1111111111111111111111111111111111111111", network: "eip155:84532", facilitatorUrl: "https://x402.org/facilitator", adminPassword: "test-password-123", ipSalt: "s", port: 8402, dbPath: ":memory:" },
+      store: new Store(":memory:"), baseDir: d, productsPath: j(d, "products.json"),
+      facilitatorClient: { getSupported: async () => ({ kinds: [] }) },
+    });
+    const res = await h.app.request("/");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/catalog");
+  });
+});
