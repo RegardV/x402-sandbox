@@ -162,6 +162,14 @@ export class Store {
     return row ? toProductRow(row) : undefined;
   }
 
+  /** PII-minimizing retention: purge traffic rows older than N days. The
+   *  settlements table is the permanent financial ledger and is never trimmed. */
+  trimRequests(days: number): number {
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const res = this.db.prepare("DELETE FROM requests WHERE ts < ?").run(cutoff);
+    return Number(res.changes);
+  }
+
   /** Persist a demand-repriced price (decimal string, no "$"). */
   setPrice(sku: string, priceUsdc: string): void {
     this.db

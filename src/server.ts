@@ -190,6 +190,13 @@ async function main() {
   const CONFIG_KEYS = ["PAY_TO", "PAY_TO_TESTNET", "PAY_TO_MAINNET", "NETWORK", "FACILITATOR_URL",
     "ADMIN_PASSWORD", "IP_SALT", "PORT", "DB_PATH", "CDP_API_KEY_ID", "CDP_API_KEY_SECRET"];
   const onRestart = () => {
+    // Under systemd (INVOCATION_ID set), Restart=always owns respawning — a
+    // self-spawned child would escape the cgroup and leave TWO servers running.
+    if (process.env.INVOCATION_ID) {
+      srv.close(() => process.exit(0));
+      setTimeout(() => process.exit(0), 3000).unref();
+      return;
+    }
     const childEnv = Object.fromEntries(
       Object.entries(process.env).filter(([k]) => !CONFIG_KEYS.includes(k)),
     ) as NodeJS.ProcessEnv;
@@ -236,6 +243,15 @@ async function main() {
     );
     console.log(`demand repricer active (${windows.length} product(s), window ${windowMs / 60000}m)`);
   }
+
+  // Privacy retention: purge traffic rows daily (settlements ledger is never trimmed).
+  const retentionDays = Number(process.env.RETENTION_DAYS ?? 90);
+  const trim = () => {
+    const n = store.trimRequests(retentionDays);
+    if (n) console.log(`retention: trimmed ${n} request row(s) older than ${retentionDays}d`);
+  };
+  trim();
+  setInterval(trim, 24 * 60 * 60_000).unref();
 
   let timer: NodeJS.Timeout | undefined;
   watch(productsPath, () => {

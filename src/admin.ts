@@ -42,9 +42,44 @@ function outcomeBadge(outcome: string): string {
   return `<span class="badge ${OUTCOME_BADGE[outcome] ?? "plain"}">${escapeHtml(outcome)}</span>`;
 }
 
+const LOCKOUT_FAILS = 5;
+const LOCKOUT_MS = 15 * 60_000;
+
 /** Read-only admin stats app, mounted by the server at /admin. */
 export function adminApp(store: Store, adminPassword: string, network: string): Hono {
   const app = new Hono();
+
+  // Brute-force lockout: 5 failed logins from one source → 429 for 15 minutes.
+  // In-memory is right here: a restart clearing it only helps the operator.
+  const attempts = new Map<string, { count: number; lockedUntil: number }>();
+  app.use("*", async (c, next) => {
+    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    const entry = attempts.get(ip);
+    const now = Date.now();
+    if (entry && entry.lockedUntil > now) {
+      return c.text("Too many failed logins — locked out for 15 minutes.", 429);
+    }
+    const recordFailure = () => {
+      const expired = entry !== undefined && entry.lockedUntil !== 0 && entry.lockedUntil <= now;
+      const count = (expired ? 0 : (entry?.count ?? 0)) + 1;
+      const lockedUntil = count >= LOCKOUT_FAILS ? now + LOCKOUT_MS : 0;
+      attempts.set(ip, { count, lockedUntil });
+      if (lockedUntil) console.warn(`[admin-audit] ${new Date().toISOString()} lockout ${ip} (${count} failures)`);
+      if (attempts.size > 1000) {
+        for (const [k, v] of attempts) if (v.lockedUntil <= now) attempts.delete(k); // ponytail: crude prune
+      }
+    };
+    try {
+      await next();
+    } catch (err) {
+      // hono's basicAuth THROWS an HTTPException on bad credentials
+      if ((err as { status?: number }).status === 401) recordFailure();
+      throw err;
+    }
+    if (c.res.status === 401) recordFailure();
+    else if (c.res.status < 400) attempts.delete(ip);
+  });
+
   app.use("*", basicAuth({ username: "admin", password: adminPassword }));
 
   app.get("/", (c) => {
