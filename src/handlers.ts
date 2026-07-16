@@ -196,7 +196,8 @@ export function catalogHtml(deps: HandlerDeps): Handler {
     return c.html(
       page(
         "Store",
-        `<h1>Store</h1><p class="lede">Pay per file with USDC via x402 — click a file to get a payment page. Agents: use <a href="/catalog.json">/catalog.json</a>.</p>${cards}`,
+        `<h1>Store</h1><p class="lede">Pay per file with USDC via x402. Built for AI agents — <a href="/catalog.json">/catalog.json</a> + the <a href="/docs/buying">buying guide</a>.</p>
+<p class="muted" style="font-size:.85rem;margin:-.75rem 0 1.5rem">Buying as a human? Easiest on desktop with a wallet extension (Coinbase Wallet, MetaMask) — click a file and pay in the popup. On mobile, open this page inside your wallet app's built-in browser; don't scan the QR from within a wallet. You need USDC on Base, no gas.</p>${cards}`,
       ),
     );
   };

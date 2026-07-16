@@ -82,7 +82,7 @@ ${code(`{
     slug: "buying",
     title: "Buying (agents)",
     body: `
-<p class="lede">For developers writing buyers — AI agents or scripts that pay for content programmatically.</p>
+<p class="lede">This gateway — and x402 itself — is <strong>agent-first</strong>: the protocol exists so software can pay per request without accounts or checkouts. Human browser purchases work, but they are the secondary path. This page covers both, agents first.</p>
 <h2>Discover</h2>
 <p><code>GET /catalog.json</code> returns every product with its price, URL, and (for folders) each purchasable file — including <code>excerpt</code> teasers when the operator enabled previews:</p>
 ${code(`{ "products": [ { "sku": "library", "title": "Whole Library", "price": "$0.01",
@@ -112,7 +112,16 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 </ol>
 <p>A missing file 404s <em>before</em> any payment challenge — you can never pay for something that doesn't exist. A repriced product accepts both old and new price for one window, so a quote you just received always verifies.</p>
 <h2>Test buyer</h2>
-<p>The repo ships one: <code>BUYER_PRIVATE_KEY=0x… node scripts/buy.mjs &lt;url&gt;</code></p>`,
+<p>The repo ships one: <code>BUYER_PRIVATE_KEY=0x… node scripts/buy.mjs &lt;url&gt;</code></p>
+<h2>Buying as a human (secondary path)</h2>
+<p>Browsers hitting a paid URL get a wallet-connect paywall page instead of JSON. What to know:</p>
+<ul>
+<li><strong>Best path — desktop + wallet extension</strong> (Coinbase Wallet, MetaMask, Rabby): click the file, approve the USDC signature in the extension popup, the file loads in the tab.</li>
+<li><strong>Mobile:</strong> open the store inside your wallet app's <em>built-in browser</em> and buy there. The paywall's QR code is only for lending a phone wallet to a <em>desktop</em> page — scanning it from inside a wallet app is a dead end ("already in wallet").</li>
+<li><strong>Delivery is the HTTP response</strong>: the file arrives in whichever browser context paid — a desktop tab, or the wallet's in-app browser (save/share from its menu).</li>
+<li>The wallet needs USDC on the store's network and <strong>zero gas</strong> — the payment is a gasless authorization.</li>
+</ul>
+<p class="muted">The paywall page is Coinbase's stock component from <code>@x402/paywall</code>; its connect UX is theirs. If human sales matter to your deployment, a custom paywall provider is a supported middleware hook.</p>`,
   },
   {
     slug: "admin",
