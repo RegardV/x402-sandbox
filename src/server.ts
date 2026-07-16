@@ -145,7 +145,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   app.route("/", docsRoutes());
   const admin = adminApp(store, env.adminPassword, env.network);
   admin.route("/", adminCrud({ store, productsPath, baseDir, onCatalogChange: () => reload() }));
-  admin.route("/", adminFiles({ products: () => products }));
+  admin.route("/", adminFiles({ products: () => products, store }));
   admin.route("/", settingsRoutes(baseDir, env, opts.onRestart));
   app.route("/admin", admin);
 

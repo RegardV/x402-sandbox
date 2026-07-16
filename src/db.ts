@@ -162,6 +162,14 @@ export class Store {
     return row ? toProductRow(row) : undefined;
   }
 
+  /** Paid hits per request path — the per-file sales signal for folder products. */
+  paidCountsByPath(): Record<string, number> {
+    const rows = this.db
+      .prepare("SELECT path, COUNT(*) AS c FROM requests WHERE outcome = 'paid_200' GROUP BY path")
+      .all() as Array<{ path: string; c: number }>;
+    return Object.fromEntries(rows.map((r) => [r.path, r.c]));
+  }
+
   /** PII-minimizing retention: purge traffic rows older than N days. The
    *  settlements table is the permanent financial ledger and is never trimmed. */
   trimRequests(days: number): number {

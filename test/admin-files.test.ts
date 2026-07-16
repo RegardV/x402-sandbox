@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, test } from "vitest";
 import { adminFiles } from "../src/admin-files.js";
+import { Store } from "../src/db.js";
 import type { ProductConfig } from "../src/config.js";
 
 function fixture() {
@@ -13,8 +14,10 @@ function fixture() {
     { sku: "lib", title: "Library", price: "$0.01", route: "GET /lib/*", contentDir: dir },
     { sku: "one", title: "One", price: "$0.02", route: "GET /one.md", contentPath: "./one.md" },
   ];
-  const app = new Hono().route("/admin", adminFiles({ products: () => products }));
-  return { dir, app };
+  const store = new Store(":memory:");
+  store.syncProducts([{ sku: "lib", title: "Library", price: "$0.01", network: "eip155:84532", contentDir: dir }]);
+  const app = new Hono().route("/admin", adminFiles({ products: () => products, store }));
+  return { dir, app, store };
 }
 
 function upload(name: string, content = "data") {
@@ -65,6 +68,33 @@ describe("adminFiles", () => {
   test("upload input allows selecting multiple files", async () => {
     const html = await (await f.app.request("/admin/files/lib")).text();
     expect(html).toContain("multiple");
+  });
+
+  test("files table shows size, public URL, and per-file paid sales", async () => {
+    const pid = f.store.productBySku("lib")!.id;
+    for (let i = 0; i < 3; i++) {
+      f.store.insertRequest({ ts: new Date().toISOString(), method: "GET", path: "/lib/existing.md", outcome: "paid_200", productId: pid, txHash: `0x${i}` });
+    }
+    const html = await (await f.app.request("/admin/files/lib")).text();
+    expect(html).toContain("7 B"); // "# hello"
+    expect(html).toContain("/lib/existing.md"); // the public URL, visible and linkable
+    expect(html).toMatch(/>3</); // paid count column
+  });
+
+  test("header shows product context: price, revenue, edit link", async () => {
+    const pid = f.store.productBySku("lib")!.id;
+    f.store.insertSettlement({ ts: new Date().toISOString(), productId: pid, amountUsdc: "0.03", payer: "0xabc", txHash: "0xr", network: "eip155:84532" });
+    const html = await (await f.app.request("/admin/files/lib")).text();
+    expect(html).toContain("$0.03"); // revenue for this product
+    expect(html).toContain("/admin/products/lib/edit");
+  });
+
+  test("operator can view a file's content free through the admin (raw)", async () => {
+    const res = await f.app.request("/admin/files/lib/raw?path=existing.md");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("# hello");
+    expect((await f.app.request("/admin/files/lib/raw?path=../../etc/passwd")).status).toBe(404);
+    expect((await f.app.request("/admin/files/lib/raw?path=.env")).status).toBe(404);
   });
 
   test("upload strips any path components — basename only", async () => {
