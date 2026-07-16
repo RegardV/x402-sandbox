@@ -92,13 +92,18 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const facilitator = opts.facilitatorClient ?? buildFacilitatorClient(env);
   const resourceServer = new x402ResourceServer(facilitator as never);
   registerExactEvmScheme(resourceServer);
-  // Payment failures are invisible without these — log the facilitator's actual reason.
-  (resourceServer as never as { onVerifyFailure(h: (ctx: unknown) => void): void }).onVerifyFailure((ctx) =>
-    console.warn(`[payment] verify FAILED: ${JSON.stringify(ctx).slice(0, 4000)}`),
-  );
-  (resourceServer as never as { onSettleFailure(h: (ctx: unknown) => void): void }).onSettleFailure((ctx) =>
-    console.warn(`[payment] settle FAILED: ${JSON.stringify(ctx).slice(0, 4000)}`),
-  );
+  // Payment failures are invisible without these — log the thrown error, not the payload dump.
+  const paymentFailure = (stage: string) => (ctx: unknown) => {
+    const { error, paymentPayload } = ctx as {
+      error?: Error & { cause?: unknown; response?: unknown };
+      paymentPayload?: { payload?: { authorization?: { from?: string } } };
+    };
+    console.warn(
+      `[payment] ${stage} FAILED from=${paymentPayload?.payload?.authorization?.from ?? "?"} error=${String(error)} cause=${JSON.stringify(error?.cause ?? null)} response=${JSON.stringify(error?.response ?? null)?.slice(0, 800)}`,
+    );
+  };
+  (resourceServer as never as { onVerifyFailure(h: (ctx: unknown) => void): void }).onVerifyFailure(paymentFailure("verify"));
+  (resourceServer as never as { onSettleFailure(h: (ctx: unknown) => void): void }).onSettleFailure(paymentFailure("settle"));
 
   const paywallConfig = { appName: "x402 sandbox", testnet: env.network === "eip155:84532" };
   const paywall = createPaywall().withNetwork(evmPaywall).withConfig(paywallConfig).build();
