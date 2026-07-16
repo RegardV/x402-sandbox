@@ -76,6 +76,14 @@ describe("createApp", () => {
     expect(rows[0]?.outcome).toBe("unpaid_402");
   });
 
+  test("product responses carry no-store so an edge cache can never serve a stale 402", async () => {
+    const res = await f.handle.app.request("/goods/guide.md");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    // free pages stay cacheable-by-default (no header)
+    const catalog = await f.handle.app.request("/catalog");
+    expect(catalog.headers.get("cache-control")).toBeNull();
+  });
+
   test("missing file inside paid dir → 404 BEFORE payment challenge", async () => {
     const res = await f.handle.app.request("/goods/nope.md");
     expect(res.status).toBe(404);

@@ -148,6 +148,11 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   admin.route("/", settingsRoutes(baseDir, env, opts.onRestart));
   app.route("/admin", admin);
 
+  // Paid paths must never be edge-cached (a cached 402 breaks buying; a cached 200 leaks content).
+  app.use(async (c, next) => {
+    await next();
+    if (matchProduct(products, c.req.method, c.req.path)) c.res.headers.set("cache-control", "no-store");
+  });
   // 404 BEFORE 402: a buyer must never pay for a file that doesn't exist.
   app.use(precheck404(deps));
   // Indirection so reload() can swap the middleware without re-mounting.
