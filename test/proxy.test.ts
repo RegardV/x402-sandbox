@@ -105,3 +105,19 @@ describe("proxy delivery", () => {
     expect((await app.request("/dead")).status).toBe(502);
   });
 });
+
+describe("catalog with proxy products", () => {
+  test("proxy products list with their route URL and no size — page must not crash", async () => {
+    const { catalogJson, catalogHtml } = await import("../src/handlers.js");
+    const products = loadProducts(
+      JSON.stringify({ products: [{ sku: "ask", title: "Ask", price: "$0.02", route: "POST /ask", proxyUrl: "http://127.0.0.1:9/x" }] }),
+      DIR,
+    );
+    const deps = { store: new Store(":memory:"), products: () => products, baseDir: DIR };
+    const app = new Hono().get("/catalog.json", catalogJson(deps)).get("/catalog", catalogHtml(deps));
+    const json = (await (await app.request("/catalog.json")).json()) as { products: Array<{ sku: string; url?: string; size?: number }> };
+    expect(json.products[0]).toMatchObject({ sku: "ask", url: "/ask" });
+    expect(json.products[0]!.size).toBeUndefined();
+    expect((await app.request("/catalog")).status).toBe(200);
+  });
+});

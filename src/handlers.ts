@@ -149,6 +149,9 @@ function catalogEntries(deps: HandlerDeps): CatalogEntry[] {
       });
       return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, files };
     }
+    if (p.proxyUrl) {
+      return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, url: pattern };
+    }
     const abs = resolve(deps.baseDir, (p.contentPath ?? p.bundlePath)!);
     return {
       sku: p.sku,
