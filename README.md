@@ -58,7 +58,7 @@ Mainnet needs a free Coinbase CDP Secret API Key (facilitator auth only — it c
 
 ## Status
 
-Tier 1 complete: 204 tests, live-verified end to end with settled Base-Sepolia purchases (buy → on-chain settlement → feed/stats/CSV). Interactive setup wizard and `npx create-x402-sandbox` packaging are next (Tier 1.5 / Tier 2).
+Tier 1 complete and running in production: 229 tests, live-verified end to end with settled testnet purchases, deployed on Base mainnet behind a Cloudflare Tunnel (systemd-managed). Interactive setup wizard and `npx create-x402-sandbox` packaging are next (Tier 1.5 / Tier 2).
 
 ## Credits
 
