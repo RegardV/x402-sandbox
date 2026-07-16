@@ -92,6 +92,13 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   const facilitator = opts.facilitatorClient ?? buildFacilitatorClient(env);
   const resourceServer = new x402ResourceServer(facilitator as never);
   registerExactEvmScheme(resourceServer);
+  // Payment failures are invisible without these — log the facilitator's actual reason.
+  (resourceServer as never as { onVerifyFailure(h: (ctx: unknown) => void): void }).onVerifyFailure((ctx) =>
+    console.warn(`[payment] verify FAILED: ${JSON.stringify(ctx).slice(0, 600)}`),
+  );
+  (resourceServer as never as { onSettleFailure(h: (ctx: unknown) => void): void }).onSettleFailure((ctx) =>
+    console.warn(`[payment] settle FAILED: ${JSON.stringify(ctx).slice(0, 600)}`),
+  );
 
   const paywallConfig = { appName: "x402 sandbox", testnet: env.network === "eip155:84532" };
   const paywall = createPaywall().withNetwork(evmPaywall).withConfig(paywallConfig).build();
