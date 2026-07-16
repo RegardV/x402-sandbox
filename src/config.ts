@@ -20,6 +20,8 @@ export interface ProductConfig {
   contentPath?: string;
   bundlePath?: string;
   contentDir?: string;
+  /** Paywall a live upstream endpoint: requests forward here after payment. */
+  proxyUrl?: string;
   mimeType?: string;
   discoverable?: boolean;
   /** Show a short text excerpt of md/txt files on the catalog (deliberate teaser). */
@@ -144,11 +146,14 @@ export function loadProducts(jsonText: string, baseDir: string): ProductConfig[]
     if (p.preview !== undefined && typeof p.preview !== "boolean") {
       fail(sku, "preview", "must be a boolean");
     }
-    const sources = [p.contentPath, p.bundlePath, p.contentDir].filter(
+    const sources = [p.contentPath, p.bundlePath, p.contentDir, p.proxyUrl].filter(
       (v) => v !== undefined,
     );
     if (sources.length !== 1) {
-      fail(sku, "contentPath/bundlePath/contentDir", "exactly one must be set");
+      fail(sku, "contentPath/bundlePath/contentDir/proxyUrl", "exactly one must be set");
+    }
+    if (p.proxyUrl !== undefined && !/^https?:\/\/\S+$/.test(p.proxyUrl)) {
+      fail(sku, "proxyUrl", "must be an http(s) URL");
     }
     const isWildcard = p.route.endsWith("/*");
     if (p.contentDir !== undefined) {
@@ -163,7 +168,7 @@ export function loadProducts(jsonText: string, baseDir: string): ProductConfig[]
       if (!stat.isDirectory()) fail(sku, "contentDir", `is not a directory: ${abs}`);
       return { ...p, contentDir: abs };
     }
-    if (isWildcard) {
+    if (isWildcard && p.proxyUrl === undefined) {
       fail(sku, "route", 'must not end with "/*" for contentPath/bundlePath products');
     }
     return { ...p };

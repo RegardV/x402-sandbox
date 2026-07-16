@@ -234,6 +234,7 @@ export function feedPage(deps: HandlerDeps): Handler {
 
 /** Absolute file for a matched product, or null if missing/denied. */
 function productFile(deps: HandlerDeps, p: ProductConfig, path: string): string | null {
+  if (p.proxyUrl) return p.proxyUrl; // upstream existence is the upstream's business
   if (p.contentDir) return resolveSafe(p.contentDir, subPath(p, path));
   const abs = resolve(deps.baseDir, (p.contentPath ?? p.bundlePath)!);
   try {
@@ -254,8 +255,29 @@ export function precheck404(deps: HandlerDeps): MiddlewareHandler {
 }
 
 export function paidContent(deps: HandlerDeps): Handler {
-  return (c) => {
+  return async (c) => {
     const p = matchProduct(deps.products(), c.req.method, c.req.path);
+    if (p?.proxyUrl) {
+      // Forward to the upstream: wildcard routes append the subpath; query string always carries.
+      const sub = p.route.endsWith("/*") ? `/${subPath(p, c.req.path)}` : "";
+      const qs = new URL(c.req.url).search;
+      try {
+        const init: RequestInit = {
+          method: c.req.method,
+          headers: {
+            accept: c.req.header("accept") ?? "*/*",
+            ...(c.req.header("content-type") ? { "content-type": c.req.header("content-type")! } : {}),
+          },
+        };
+        if (c.req.method !== "GET" && c.req.method !== "HEAD") init.body = await c.req.arrayBuffer();
+        const upstream = await fetch(`${p.proxyUrl}${sub}${qs}`, init);
+        return c.body(upstream.body ?? "", upstream.status as never, {
+          "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
+        });
+      } catch {
+        return c.text("upstream unavailable", 502);
+      }
+    }
     const file = p && productFile(deps, p, c.req.path);
     if (!p || !file) return c.text("Not Found", 404);
     let bytes: Buffer;

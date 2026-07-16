@@ -39,7 +39,7 @@ function writeCatalog(productsPath: string, products: ProductConfig[]): void {
   renameSync(tmp, productsPath);
 }
 
-const FORM_FIELDS = ["title", "description", "price", "route", "contentPath", "bundlePath", "contentDir", "mimeType"] as const;
+const FORM_FIELDS = ["title", "description", "price", "route", "contentPath", "bundlePath", "contentDir", "proxyUrl", "mimeType"] as const;
 
 /** Merge submitted form fields onto `base` (or start fresh for create). Empty strings are dropped. */
 function buildEntry(base: ProductConfig | undefined, sku: string, body: Record<string, unknown>): ProductConfig {
@@ -50,7 +50,7 @@ function buildEntry(base: ProductConfig | undefined, sku: string, body: Record<s
   }
   // The three content-source fields are mutually exclusive: if the form supplied any of
   // them, drop whichever ones it left blank instead of keeping a stale value from `base`.
-  const sources = ["contentPath", "bundlePath", "contentDir"] as const;
+  const sources = ["contentPath", "bundlePath", "contentDir", "proxyUrl"] as const;
   if (sources.some((f) => typeof body[f] === "string" && body[f] !== "")) {
     for (const f of sources) {
       if (!(typeof body[f] === "string" && body[f] !== "")) delete entry[f];
@@ -146,6 +146,7 @@ ${field("route", p.route)}
 ${field("contentPath", p.contentPath)}
 ${field("bundlePath", p.bundlePath)}
 ${field("contentDir", p.contentDir)}
+${field("proxyUrl", p.proxyUrl)}
 ${field("mimeType", p.mimeType)}
 <label style="font-weight:400"><input type="checkbox" name="preview" ${p.preview ? "checked" : ""}> Show text excerpts on the store (preview)</label>
 <label style="font-weight:400"><input type="checkbox" name="discoverable" ${p.discoverable ? "checked" : ""}> List in x402 discovery registries (Bazaar)</label>
