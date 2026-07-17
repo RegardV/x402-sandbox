@@ -22,7 +22,7 @@ const PAGES: DocPage[] = [
 <ol>
 <li>A buyer requests a paid URL, e.g. <code>GET /guides/soil.pdf</code></li>
 <li>The gateway answers <code>402</code> with a machine-readable quote (price, receiving wallet, network) in the <code>payment-required</code> header</li>
-<li>The buyer's client signs a USDC payment authorization and retries the request with an <code>X-PAYMENT</code> header</li>
+<li>The buyer's client signs a USDC payment authorization and retries the request with an <code>payment-signature</code> header (older clients: <code>X-PAYMENT</code>)</li>
 <li>A <em>facilitator</em> verifies and settles it on-chain; the gateway serves the content and returns a settlement receipt in the <code>PAYMENT-RESPONSE</code> header</li>
 </ol>
 <p>The buyer needs no gas — payment authorizations are gasless (EIP-3009); the facilitator sponsors settlement.</p>
@@ -123,7 +123,7 @@ const receipt = decodePaymentResponseHeader(res.headers.get("payment-response"))
 <h2>Pay — raw HTTP (any language)</h2>
 <ol>
 <li><code>GET</code> the paid URL → <code>402</code>; decode the base64 <code>payment-required</code> response header → JSON with <code>accepts[]</code> (scheme, network, amount in atomic units, asset contract, payTo)</li>
-<li>Sign an EIP-3009 <code>transferWithAuthorization</code> for exactly that amount, encode per the x402 spec, retry the request with it in the <code>X-PAYMENT</code> header</li>
+<li>Sign an EIP-3009 <code>transferWithAuthorization</code> for exactly that amount, encode per the x402 spec, retry the request with it in the <code>payment-signature</code> header (SDK ≥2.18; older clients use <code>X-PAYMENT</code>)</li>
 <li><code>200</code> + content; the base64 <code>PAYMENT-RESPONSE</code> header carries <code>{ success, payer, transaction, network }</code></li>
 </ol>
 <p>A missing file 404s <em>before</em> any payment challenge — you can never pay for something that doesn't exist. A repriced product accepts both old and new price for one window, so a quote you just received always verifies.</p>
@@ -249,7 +249,7 @@ ${code(`ingress:
 ${code(`{ "x402Version": 2, "resource": { "url": "…", "description": "…" },
   "accepts": [ { "scheme": "exact", "network": "eip155:84532", "amount": "10000",
                  "asset": "0x036C…CF7e", "payTo": "0x…", "maxTimeoutSeconds": 300 } ] }`)}
-<p><code>amount</code> is atomic units (USDC has 6 decimals: <code>10000</code> = $0.01). Retry with the signed payment in <code>X-PAYMENT</code>. Success — status <code>200</code>, header <code>PAYMENT-RESPONSE</code> (base64 JSON):</p>
+<p><code>amount</code> is atomic units (USDC has 6 decimals: <code>10000</code> = $0.01). Retry with the signed payment in <code>payment-signature</code> (older clients: <code>X-PAYMENT</code>). Success — status <code>200</code>, header <code>PAYMENT-RESPONSE</code> (base64 JSON):</p>
 ${code(`{ "success": true, "payer": "0x…", "transaction": "0x…", "network": "eip155:84532" }`)}
 <p>Browsers (Accept: text/html + Mozilla UA) get a wallet-connect payment page on 402 instead of JSON.</p>
 <h2>Environment</h2>

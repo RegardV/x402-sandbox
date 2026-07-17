@@ -195,7 +195,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
     const p = matchProduct(products, c.req.method, c.req.path);
     if (!p) return next();
     if (c.req.method === "HEAD") return c.body(null, 200); // existence probe: headers only, no payment
-    if (!c.req.header("x-payment")) {
+    if (!c.req.header("x-payment") && !c.req.header("payment-signature")) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
       const grant = store.findRedeliveryGrant(c.req.path, hashIp(ip, env.ipSalt), redeliveryMinutes);
       if (grant) {
