@@ -64,6 +64,10 @@ Running in production on Base mainnet behind a Cloudflare Tunnel (systemd-manage
 
 [x402-packager]: https://github.com/RegardV/x402-packager
 
+## Build log
+
+x402 has no settled spec — its wire format lags its SDK, and the money path fails in ways nothing documents. **[BUILDLOG.md](BUILDLOG.md)** is the honest record of getting to the first real dollar: the four undocumented failures between a valid signature and a settled payment (a mixed-content wall behind the tunnel, an empty smart-wallet trap, an ~256-char description limit found by binary-searching Coinbase's facilitator, an SDK header rename), the bugs that were invisible until we logged the facilitator's actual response, and why the first lesson of any payment integration is *build the money-path observability first*. Worth reading before you integrate x402 anywhere.
+
 ## Credits
 
 - Verify/settle wiring pattern from [dabit3/x402-starter-kit](https://github.com/dabit3/x402-starter-kit) (MIT)
