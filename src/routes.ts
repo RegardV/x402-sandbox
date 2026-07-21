@@ -59,7 +59,11 @@ export function buildRoutes(
       const auto = p.discoverable ? declareDiscoveryExtension({ method: "GET" } as never) : {};
       entry.extensions = { ...auto, ...p.extensions, ...(p.discoverable ? { discoverable: true } : {}) };
     }
-    if (env.publicOrigin && !p.route.endsWith("/*")) {
+    // A canonical https resource fixes the mixed-content retry (BUILDLOG) — BUT it also
+    // drops the query string. Parameterized products (humanForm) carry their inputs in the
+    // query and must sign/retry the LIVE url, so skip the override for them; proxyAwareFetch
+    // already upgrades their url to https, so getUrl() stays mixed-content-safe.
+    if (env.publicOrigin && !p.route.endsWith("/*") && !p.humanForm) {
       entry.resource = `${env.publicOrigin}${p.route.slice(p.route.indexOf(" ") + 1)}`;
     }
     routes[p.route] = entry;

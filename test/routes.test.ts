@@ -79,6 +79,20 @@ describe("buildRoutes", () => {
   test("empty product list yields empty routes", () => {
     expect(buildRoutes([], env)).toEqual({});
   });
+
+  test("publicOrigin sets a canonical resource for normal products, but NOT for humanForm ones", () => {
+    const envPub = { ...env, publicOrigin: "https://store.example.com" };
+    const proxy: ProductConfig = { sku: "p", title: "P", price: "$0.02", route: "GET /books-web", proxyUrl: "http://127.0.0.1:8404/report" };
+    const parameterized: ProductConfig = {
+      ...proxy, sku: "pf", route: "GET /books-form",
+      humanForm: [{ name: "wallet", label: "Wallet", type: "text" }],
+    };
+    const routes = buildRoutes([proxy, parameterized], envPub);
+    // normal proxy product → canonical https resource (mixed-content safe, query-less)
+    expect((routes["GET /books-web"] as any).resource).toBe("https://store.example.com/books-web");
+    // parameterized product → NO static resource, so the live https url (with query) is signed
+    expect((routes["GET /books-form"] as any).resource).toBeUndefined();
+  });
 });
 
 describe("bazaar discovery declarations", () => {
