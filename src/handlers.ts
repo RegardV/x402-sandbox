@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler } from "hono";
 import { readFileSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
-import type { ProductConfig } from "./config.js";
+import type { HumanFormField, ProductConfig } from "./config.js";
 import type { Store } from "./db.js";
 import { listSafe, resolveSafe } from "./resolve-safe.js";
 
@@ -69,6 +69,24 @@ function routePath(p: ProductConfig): string {
   return p.route.slice(p.route.indexOf(" ") + 1);
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** <option>s for the last `count` months, newest first, value "YYYY-MM". A single
+ *  native dropdown is a far better period picker than <input type="month">. */
+function recentMonthOptions(count = 24): string {
+  const now = new Date();
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    out.push(`<option value="${d.getFullYear()}-${mm}">${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}</option>`);
+  }
+  return out.join("");
+}
+
 export function matchProduct(
   products: ProductConfig[],
   method: string,
@@ -116,6 +134,7 @@ interface CatalogEntry {
   url?: string;
   size?: number;
   files?: CatalogFile[];
+  humanForm?: HumanFormField[];
 }
 
 function statSize(abs: string): number | undefined {
@@ -150,7 +169,7 @@ function catalogEntries(deps: HandlerDeps): CatalogEntry[] {
       return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, files };
     }
     if (p.proxyUrl) {
-      return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, url: pattern };
+      return { sku: p.sku, title: p.title, description: p.description, price: displayPrice(deps, p), route: p.route, url: pattern, ...(p.humanForm ? { humanForm: p.humanForm } : {}) };
     }
     const abs = resolve(deps.baseDir, (p.contentPath ?? p.bundlePath)!);
     return {
@@ -189,6 +208,29 @@ export function catalogHtml(deps: HandlerDeps): Handler {
           body = e.files.length
             ? `<table class="files">${rows}</table>`
             : `<p class="muted">No files yet — drop files into this product's folder to sell them.</p>`;
+        } else if (e.humanForm && e.url) {
+          // Capture fields first: a native GET form navigates to the product route as
+          // a query string, so the paywall fires WITH the params the buyer entered.
+          const fields = e.humanForm
+            .map((f) => {
+              const req = f.required ? " required" : "";
+              let control: string;
+              if (f.type === "select") {
+                control = `<select name="${escapeHtml(f.name)}">${(f.options ?? [])
+                  .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
+                  .join("")}</select>`;
+              } else if (f.type === "month") {
+                const blank = f.blankLabel ? `<option value="">${escapeHtml(f.blankLabel)}</option>` : "";
+                control = `<select name="${escapeHtml(f.name)}">${blank}${recentMonthOptions()}</select>`;
+              } else {
+                control = `<input name="${escapeHtml(f.name)}" type="${escapeHtml(f.type ?? "text")}"${
+                  f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ""
+                }${f.pattern ? ` pattern="${escapeHtml(f.pattern)}"` : ""}${req}>`;
+              }
+              return `<label class="field"><span>${escapeHtml(f.label)}</span>${control}</label>`;
+            })
+            .join("");
+          body = `<form class="buyform" method="get" action="${escapeHtml(e.url)}">${fields}<button type="submit">Buy — pay with wallet</button></form>`;
         } else if (e.url) {
           body = `<table class="files"><tr><td><a href="${e.url}">${escapeHtml(e.url)}</a></td><td class="size">${
             e.size !== undefined ? humanSize(e.size) : ""

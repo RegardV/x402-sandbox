@@ -9,6 +9,22 @@ export interface DemandPricing {
   windowMinutes: number;
 }
 
+/** A capture field rendered on the store card for a paid GET product. Submitting
+ *  the form navigates to the product route as a query string, so the paywall fires
+ *  with those params (e.g. books needs wallet/period/jurisdiction before paying). */
+export interface HumanFormField {
+  name: string;
+  label: string;
+  type?: "text" | "month" | "select";
+  placeholder?: string;
+  pattern?: string;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  /** For a month field: a leading blank option (e.g. "— single month —") so the
+   *  field is optional and blank means "not set". */
+  blankLabel?: string;
+}
+
 export interface ProductConfig {
   sku: string;
   title: string;
@@ -26,6 +42,8 @@ export interface ProductConfig {
   discoverable?: boolean;
   /** Show a short text excerpt of md/txt files on the catalog (deliberate teaser). */
   preview?: boolean;
+  /** Capture fields for the human store card (paid GET products that need params). */
+  humanForm?: HumanFormField[];
   extensions?: Record<string, unknown>;
 }
 
@@ -154,6 +172,22 @@ export function loadProducts(jsonText: string, baseDir: string): ProductConfig[]
     }
     if (p.proxyUrl !== undefined && !/^https?:\/\/\S+$/.test(p.proxyUrl)) {
       fail(sku, "proxyUrl", "must be an http(s) URL");
+    }
+    if (p.humanForm !== undefined) {
+      if (!Array.isArray(p.humanForm) || p.humanForm.length === 0) {
+        fail(sku, "humanForm", "must be a non-empty array of fields");
+      }
+      for (const fld of p.humanForm) {
+        if (typeof fld?.name !== "string" || typeof fld?.label !== "string") {
+          fail(sku, "humanForm", "each field needs string name and label");
+        }
+        if (fld.type === "select" && !(Array.isArray(fld.options) && fld.options.length > 0)) {
+          fail(sku, "humanForm", `select field "${fld.name}" needs options`);
+        }
+      }
+      if (!p.route.startsWith("GET ")) {
+        fail(sku, "humanForm", "only supported on GET products (form submits as a query string)");
+      }
     }
     const isWildcard = p.route.endsWith("/*");
     if (p.contentDir !== undefined) {

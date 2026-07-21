@@ -58,6 +58,10 @@ button,.btn{font:inherit;font-weight:600;background:var(--accent);color:var(--ac
 button:hover,.btn:hover{filter:brightness(1.08)}
 button.danger{background:transparent;color:var(--bad);border:1px solid var(--line);padding:.25rem .7rem}
 button.danger:hover{background:var(--bad-soft);filter:none}
+.buyform{display:flex;flex-direction:column;gap:.6rem;margin-top:.6rem}
+.buyform .field{display:flex;flex-direction:column;gap:.2rem;font-size:.85rem;font-weight:600}
+.buyform input,.buyform select{font:inherit;font-weight:400;padding:.5rem .6rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit}
+.buyform button{margin-top:.3rem;align-self:flex-start}
 input,select{font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:.45rem .7rem}
 input:focus{outline:2px solid var(--accent);outline-offset:1px}
 form.panel{background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:1rem 1.2rem;margin:1rem 0;display:flex;gap:.8rem;align-items:center;flex-wrap:wrap}

@@ -64,6 +64,21 @@ beforeAll(() => {
       route: "GET /files/missing.pdf",
       contentPath: "./content/missing.pdf",
     },
+    {
+      sku: "booksdemo",
+      title: "Books Demo",
+      price: "$0.02",
+      route: "GET /booksdemo",
+      proxyUrl: "http://127.0.0.1:8404/report",
+      humanForm: [
+        { name: "wallet", label: "Seller wallet", type: "text", pattern: "0x[0-9a-fA-F]{40}", required: true },
+        { name: "period", label: "Period", type: "month", required: true },
+        { name: "to", label: "To", type: "month", blankLabel: "— single month —" },
+        { name: "jurisdiction", label: "Jurisdiction", type: "select", options: [
+          { value: "NONE", label: "None" }, { value: "ZA", label: "South Africa" },
+        ] },
+      ],
+    },
   ];
 
   store = new Store(":memory:");
@@ -130,7 +145,7 @@ describe("catalogJson", () => {
     const res = await app.request("/catalog.json");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.products).toHaveLength(4);
+    expect(body.products).toHaveLength(5);
     const a = body.products.find((p: any) => p.sku === "a");
     expect(a).toMatchObject({
       title: "Article A",
@@ -171,6 +186,25 @@ describe("catalogHtml", () => {
     expect(html).toContain('href="/docs/guide.md"');
     expect(html).toContain('href="/docs/data.zip"');
     expect(html).not.toContain(".secret");
+  });
+
+  test("renders a capture form for humanForm products, not a bare link", async () => {
+    const app = new Hono().get("/catalog", catalogHtml(deps));
+    const html = await (await app.request("/catalog")).text();
+    // GET form navigates to the product route so the paywall fires WITH params
+    expect(html).toContain('<form class="buyform" method="get" action="/booksdemo">');
+    expect(html).toContain('name="wallet"');
+    // month field renders as a recent-months dropdown, not native <input type=month>
+    expect(html).toContain('<select name="period">');
+    expect(html).toMatch(/<option value="\d{4}-\d{2}">[A-Z][a-z]+ \d{4}<\/option>/);
+    expect(html).not.toContain('type="month"');
+    // optional "to" month field carries a leading blank option (single-month default)
+    expect(html).toContain('<select name="to">');
+    expect(html).toContain('<option value="">— single month —</option>');
+    expect(html).toContain('<select name="jurisdiction">');
+    expect(html).toContain('<option value="ZA">South Africa</option>');
+    // the bare "<a href="/booksdemo">" link should NOT be the body for this product
+    expect(html).not.toContain('<a href="/booksdemo"');
   });
 });
 
